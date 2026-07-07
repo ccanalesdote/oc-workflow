@@ -43,6 +43,7 @@ import {
   applyAgentChanges,
 } from "../lib/agents.js";
 import { readTemplate, validateAllTemplates } from "../lib/templates.js";
+import { installCoreSkill } from "../lib/skills.js";
 import * as opencodeModels from "../lib/opencode-models.js";
 import { CUSTOM_MODEL_VALUE } from "../lib/opencode-models.js";
 import * as messages from "../lib/messages.js";
@@ -60,6 +61,7 @@ const SKIP_ONE_MODEL_VALUE = "__skip_one_model__";
 function setupProjectFixture(opts?: {
   activeCustom?: string[];
   builtinModels?: Record<string, string>;
+  activeSkills?: string[];
 }): string {
   const tmp = mkdtempSync(join(tmpdir(), "init-cmd-"));
   const agentDir = join(tmp, ".opencode", "agent");
@@ -84,6 +86,20 @@ function setupProjectFixture(opts?: {
     const contentWithMarker = addManagedMarker(templateContent);
     writeFileSync(join(agentDir, `${name}.md`), contentWithMarker, "utf-8");
   }
+
+  // Pre-install core skills if requested (for tests that check "no changes")
+  if (opts?.activeSkills) {
+    const target = {
+      scope: "project" as const,
+      agentDir,
+      configPath,
+      skillDir: join(tmp, ".opencode", "skills"),
+    };
+    for (const skillName of opts.activeSkills) {
+      installCoreSkill(skillName as any, target);
+    }
+  }
+
   return tmp;
 }
 
@@ -121,6 +137,7 @@ describe("initCommand", () => {
   function chdirToFixture(opts?: {
     activeCustom?: string[];
     builtinModels?: Record<string, string>;
+    activeSkills?: string[];
   }): string {
     tmpRoot = setupProjectFixture(opts);
     process.chdir(tmpRoot);
@@ -203,6 +220,7 @@ describe("initCommand", () => {
         "auditor",
         "research",
       ],
+      activeSkills: ["cross-repo-architecture"],
     });
 
     // Agent step: skip
@@ -366,6 +384,7 @@ describe("initCommand", () => {
         "auditor",
         "research",
       ],
+      activeSkills: ["cross-repo-architecture"],
     });
 
     // Agent step: select agents → all 9 selected → no agent changes
@@ -708,5 +727,135 @@ describe("initCommand", () => {
     logSpy.mockRestore();
     errorSpy.mockRestore();
     exitSpy.mockRestore();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Skill-related init tests (AC-07, AC-08, AC-09, AC-11)
+  // ---------------------------------------------------------------------------
+
+  it("fresh init installs the core skill alongside agents", async () => {
+    const root = chdirToFixture();
+
+    // Agent step: select agents, pick developer
+    vi.mocked(select).mockResolvedValueOnce("__select__" as any);
+    vi.mocked(checkbox).mockResolvedValueOnce(["developer"]);
+    // Profile step: skip
+    vi.mocked(select).mockResolvedValueOnce(SKIP_PROFILES_VALUE as any);
+    // Model step: skip
+    mockModelsSkip();
+    // Final confirm: yes
+    vi.mocked(select).mockResolvedValueOnce("yes" as any);
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await initCommand({ project: true });
+
+    // Agent was installed
+    expect(existsSync(join(root, ".opencode", "agent", "developer.md"))).toBe(true);
+
+    // Core skill was installed
+    const skillPath = join(root, ".opencode", "skills", "cross-repo-architecture", "SKILL.md");
+    expect(existsSync(skillPath)).toBe(true);
+    const skillContent = readFileSync(skillPath, "utf-8");
+    expect(skillContent).toContain("<!-- managed-by: opencode-path -->");
+    expect(skillContent).toContain("Cross-Repo Architecture");
+
+    // Result output mentions skill installation
+    const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(output).toContain("Skills installed:");
+    expect(output).toContain("cross-repo-architecture");
+
+    logSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  it("init with skill already installed does not reinstall", async () => {
+    chdirToFixture({
+      activeSkills: ["cross-repo-architecture"],
+    });
+
+    // Agent step: skip
+    vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
+    // Profile step: no patchable custom agents active, auto-skipped
+    // Model step: skip
+    mockModelsSkip();
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await initCommand({ project: true });
+
+    const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    // Should report "No changes needed." since skill is already installed
+    // and no agents/profiles/models were selected
+    expect(output).toContain("No changes needed.");
+
+    logSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  it("dry-run does not install the core skill", async () => {
+    const root = chdirToFixture();
+
+    // Agent step: skip
+    vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
+    // Profile step: no patchable custom agents active, auto-skipped
+    // Model step: skip
+    mockModelsSkip();
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await initCommand({ project: true, dryRun: true });
+
+    // Skill file should NOT exist
+    const skillPath = join(root, ".opencode", "skills", "cross-repo-architecture", "SKILL.md");
+    expect(existsSync(skillPath)).toBe(false);
+
+    // Dry-run label was printed
+    const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(output).toContain("No files were modified");
+    // Skills planned are shown
+    expect(output).toContain("cross-repo-architecture");
+
+    logSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  it("init warns about conflicting core skill and does not apply when only conflict exists", async () => {
+    const root = chdirToFixture();
+
+    // Create an unmanaged skill file without the managed marker
+    const skillDir = join(root, ".opencode", "skills", "cross-repo-architecture");
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(join(skillDir, "SKILL.md"), "# Manual skill\n", "utf-8");
+
+    // Agent step: skip
+    vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
+    // Profile step: no patchable agents, auto-skipped
+    // Model step: skip
+    mockModelsSkip();
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await initCommand({ project: true });
+
+    const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+
+    // Should warn about conflicting skill
+    expect(output).toContain("Conflicting skills");
+
+    // Should NOT enter apply mode (no actionable changes)
+    expect(output).toContain("No changes needed.");
+
+    // Unmanaged file should NOT be overwritten
+    const content = readFileSync(join(skillDir, "SKILL.md"), "utf-8");
+    expect(content).toBe("# Manual skill\n");
+    expect(content).not.toContain("<!-- managed-by: opencode-path -->");
+
+    logSpy.mockRestore();
+    errorSpy.mockRestore();
   });
 });

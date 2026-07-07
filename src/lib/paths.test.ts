@@ -16,12 +16,16 @@ describe("resolveTarget", () => {
     expect(target.configPath).toBe(
       resolve("/my/project", ".opencode", "opencode.json")
     );
+    expect(target.skillDir).toBe(
+      resolve("/my/project", ".opencode", "skills")
+    );
   });
 
   it("resolves project target using process.cwd() when no cwd given", () => {
     const target = resolveTarget("project");
     expect(target.scope).toBe("project");
     expect(target.agentDir).toContain(".opencode");
+    expect(target.skillDir).toContain(".opencode");
   });
 
   it("resolves global target to ~/.config/opencode/", () => {
@@ -32,6 +36,9 @@ describe("resolveTarget", () => {
     );
     expect(target.configPath).toBe(
       resolve(homedir(), ".config", "opencode", "opencode.json")
+    );
+    expect(target.skillDir).toBe(
+      resolve(homedir(), ".config", "opencode", "skills")
     );
   });
 });

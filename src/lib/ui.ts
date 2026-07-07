@@ -131,8 +131,11 @@ export function printHeader(title: string, emoji: string): void {
   console.log(pc.bold(`\n${emoji} ${title}\n`));
 }
 
-export function printPaths(target: { agentDir: string; configPath: string }): void {
+export function printPaths(target: { agentDir: string; configPath: string; skillDir?: string }): void {
   console.log(pc.bold(`   Agent dir: ${target.agentDir}`));
+  if (target.skillDir) {
+    console.log(pc.bold(`   Skill dir: ${target.skillDir}`));
+  }
   console.log(pc.bold(`   Config:    ${target.configPath}\n`));
 }
 

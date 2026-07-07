@@ -33,6 +33,11 @@ import {
 } from "../lib/opencode-models.js";
 import { validateAllTemplates } from "../lib/templates.js";
 import {
+  installCoreSkill,
+  listManagedSkillStatuses,
+  type ManagedSkillStatus,
+} from "../lib/skills.js";
+import {
   printHeader,
   printPaths,
   printWarning,
@@ -58,6 +63,19 @@ import {
   type SummaryLine,
 } from "../lib/ui.js";
 import * as messages from "../lib/messages.js";
+
+// ---------------------------------------------------------------------------
+// Technical debt (AC-10): Future init expansion
+// ---------------------------------------------------------------------------
+// When optional skills are introduced, `init` should gain an optional
+// skill-selection step (similar to today's agent-selection step) that lets
+// users pick which optional skills to install alongside the always-installed
+// core skills. This should be implemented after optional skills exist and
+// a dedicated `skills` command is available.
+//
+// The current core-skill installation (unconditional, no prompts) is
+// intentionally simple. Do not expand it until optional skills are defined.
+// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Patchable agents for profiles (same as standalone profiles command)
@@ -88,6 +106,7 @@ interface InitPlan {
   selectedProfiles: string[];
   modelAssignments: { agent: ManagedAgentStatus; model: string }[];
   target: InstallTarget;
+  skillStatuses: ManagedSkillStatus[];
 }
 
 interface InitApplyResult {
@@ -105,6 +124,11 @@ interface InitApplyResult {
   modelResult: {
     configured: { agent: string; model: string }[];
     failed: string[];
+  };
+  skillResult: {
+    installed: string[];
+    unchanged: string[];
+    conflicts: string[];
   };
 }
 
@@ -318,6 +342,32 @@ function buildConsolidatedSummary(
     });
   }
 
+  // Core skills (always installed, no prompt)
+  const skillsToInstall = plan.skillStatuses.filter((s) => s.state === "missing");
+  const skillsActive = plan.skillStatuses.filter((s) => s.state === "active");
+  const skillsConflict = plan.skillStatuses.filter((s) => s.state === "conflict");
+  
+  if (skillsConflict.length > 0) {
+    lines.push({
+      label: "Skill conflicts:",
+      value: skillsConflict.map((s) => s.name).join(", "),
+      color: "red",
+    });
+  }
+  if (skillsToInstall.length > 0) {
+    lines.push({
+      label: "Skills:",
+      value: skillsToInstall.map((s) => s.name).join(", "),
+      color: "green",
+    });
+  } else if (skillsConflict.length === 0 && skillsActive.length > 0) {
+    lines.push({
+      label: "Skills:",
+      value: "already installed",
+      color: "dim",
+    });
+  }
+
   return lines;
 }
 
@@ -327,8 +377,11 @@ function hasPlannedChanges(plan: InitPlan): boolean {
     (plan.agentChanges.toInstall.length > 0 ||
       plan.agentChanges.toRestore.length > 0);
 
+  const hasSkillChanges = plan.skillStatuses.some((s) => s.state === "missing");
+
   return (
     hasAgentChanges ||
+    hasSkillChanges ||
     plan.selectedProfiles.length > 0 ||
     plan.modelAssignments.length > 0
   );
@@ -346,6 +399,7 @@ async function applyPlan(
     agentResult: { installed: [], restored: [], unchanged: [], conflicts: [] },
     profileResult: { applied: [], skipped: [], failed: [] },
     modelResult: { configured: [], failed: [] },
+    skillResult: { installed: [], unchanged: [], conflicts: [] },
   };
 
   // 1. Apply agent changes
@@ -368,11 +422,35 @@ async function applyPlan(
     };
   }
 
-  // 2. Create or merge config
+  // 2. Install core skills (always, no user prompt)
+  await applyPhaseCheckpoint();
+  for (const skill of plan.skillStatuses) {
+    await applyPhaseCheckpoint();
+    if (skill.state === "missing") {
+      try {
+        const installResult = installCoreSkill(skill.name, plan.target);
+        if (installResult === "created") {
+          result.skillResult.installed.push(skill.name);
+        } else if (installResult === "conflict") {
+          result.skillResult.conflicts.push(skill.name);
+        } else {
+          result.skillResult.unchanged.push(skill.name);
+        }
+      } catch {
+        result.skillResult.conflicts.push(skill.name);
+      }
+    } else if (skill.state === "active") {
+      result.skillResult.unchanged.push(skill.name);
+    } else if (skill.state === "conflict") {
+      result.skillResult.conflicts.push(skill.name);
+    }
+  }
+
+  // 3. Create or merge config
   await applyPhaseCheckpoint();
   createOrMergeConfig(plan.target.configPath);
 
-  // 3. Apply profile changes
+  // 4. Apply profile changes
   if (plan.selectedProfiles.length > 0) {
     await applyPhaseCheckpoint();
 
@@ -413,7 +491,7 @@ async function applyPlan(
     }
   }
 
-  // 4. Apply model assignments
+  // 5. Apply model assignments
   await applyPhaseCheckpoint();
   for (const assignment of plan.modelAssignments) {
     await applyPhaseCheckpoint();
@@ -489,12 +567,28 @@ export async function initCommand(
     );
   }
 
+  // Scan skill state for conflicts
+  const skillStatuses = listManagedSkillStatuses(target);
+  const conflictSkills = skillStatuses.filter((s) => s.state === "conflict");
+
+  if (conflictSkills.length > 0) {
+    printWarning(
+      `Conflicting skills (manual files without managed marker): ${conflictSkills
+        .map((s) => s.name)
+        .join(", ")}`
+    );
+    console.log(
+      "     Core skills cannot be installed here. Resolve manually or add the marker.\n"
+    );
+  }
+
   // Build the plan
   const plan: InitPlan = {
     agentChanges: null,
     selectedProfiles: [],
     modelAssignments: [],
     target,
+    skillStatuses,
   };
 
   // Step 3: Agent selection (AC-03, AC-06, AC-07)
@@ -827,6 +921,20 @@ export async function initCommand(
     resultLines.push({
       label: "Model errors:",
       value: applyResult.modelResult.failed.join(", "),
+      color: "red",
+    });
+  }
+  if (applyResult.skillResult.installed.length > 0) {
+    resultLines.push({
+      label: "Skills installed:",
+      value: applyResult.skillResult.installed.join(", "),
+      color: "green",
+    });
+  }
+  if (applyResult.skillResult.conflicts.length > 0) {
+    resultLines.push({
+      label: "Skill conflicts:",
+      value: applyResult.skillResult.conflicts.join(", "),
       color: "red",
     });
   }

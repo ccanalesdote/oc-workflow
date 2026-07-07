@@ -56,6 +56,7 @@ function fixtureTarget(scope: "project" | "global" = "project"): InstallTarget {
       scope: "project",
       agentDir: join(base, ".opencode", "agent"),
       configPath: join(base, ".opencode", "opencode.json"),
+      skillDir: join(base, ".opencode", "skills"),
     };
   }
   const base = join(FIXTURE_DIR, "global");
@@ -64,6 +65,7 @@ function fixtureTarget(scope: "project" | "global" = "project"): InstallTarget {
     scope: "global",
     agentDir: join(base, "agent"),
     configPath: join(base, "opencode.json"),
+    skillDir: join(base, "skills"),
   };
 }
 
@@ -786,6 +788,7 @@ describe("edge cases", () => {
       scope: "project",
       agentDir: join(base, ".opencode", "agent"),
       configPath: join(base, ".opencode", "opencode.json"),
+      skillDir: join(base, ".opencode", "skills"),
     };
     // Intentionally do NOT create directories or config
 
@@ -814,6 +817,7 @@ describe("edge cases", () => {
       scope: "project",
       agentDir: join(base, ".opencode", "agent"),
       configPath: join(base, ".opencode", "opencode.json"),
+      skillDir: join(base, ".opencode", "skills"),
     };
 
     // Initially active
@@ -837,6 +841,7 @@ describe("edge cases", () => {
       scope: "project",
       agentDir: join(base, ".opencode", "agent"),
       configPath: join(base, ".opencode", "opencode.json"),
+      skillDir: join(base, ".opencode", "skills"),
     };
 
     // models uses listActiveManagedModelAgents
@@ -853,6 +858,7 @@ describe("edge cases", () => {
       scope: "global",
       agentDir: join(globalBase, "agent"),
       configPath: join(globalBase, "opencode.json"),
+      skillDir: join(globalBase, "skills"),
     };
     writeConfig(globalTarget.configPath, {
       $schema: "https://opencode.ai/config.json",
@@ -867,6 +873,7 @@ describe("edge cases", () => {
       scope: "project",
       agentDir: join(projectBase, ".opencode", "agent"),
       configPath: join(projectBase, ".opencode", "opencode.json"),
+      skillDir: join(projectBase, ".opencode", "skills"),
     };
 
     // Both targets should have manageable agents
@@ -901,6 +908,7 @@ describe("detectManageableScopes", () => {
       scope: "project",
       agentDir: join(projectBase, ".opencode", "agent"),
       configPath: join(projectBase, ".opencode", "opencode.json"),
+      skillDir: join(projectBase, ".opencode", "skills"),
     };
 
     const globalBase = join(FIXTURE_DIR, "detect-both-empty-global");
@@ -908,6 +916,7 @@ describe("detectManageableScopes", () => {
       scope: "global",
       agentDir: join(globalBase, "agent"),
       configPath: join(globalBase, "opencode.json"),
+      skillDir: join(globalBase, "skills"),
     };
 
     const result = detectManageableScopes(projectTarget, globalTarget);
@@ -923,6 +932,7 @@ describe("detectManageableScopes", () => {
       scope: "global",
       agentDir: join(globalBase, "agent"),
       configPath: join(globalBase, "opencode.json"),
+      skillDir: join(globalBase, "skills"),
     };
     writeConfig(globalTarget.configPath, {
       $schema: "https://opencode.ai/config.json",
@@ -935,6 +945,7 @@ describe("detectManageableScopes", () => {
       scope: "project",
       agentDir: join(projectBase, ".opencode", "agent"),
       configPath: join(projectBase, ".opencode", "opencode.json"),
+      skillDir: join(projectBase, ".opencode", "skills"),
     };
 
     const result = detectManageableScopes(projectTarget, globalTarget);
@@ -950,6 +961,7 @@ describe("detectManageableScopes", () => {
       scope: "project",
       agentDir: join(projectBase, ".opencode", "agent"),
       configPath: join(projectBase, ".opencode", "opencode.json"),
+      skillDir: join(projectBase, ".opencode", "skills"),
     };
     writeConfig(projectTarget.configPath, {
       $schema: "https://opencode.ai/config.json",
@@ -966,6 +978,7 @@ describe("detectManageableScopes", () => {
       scope: "global",
       agentDir: join(globalBase, "agent"),
       configPath: join(globalBase, "opencode.json"),
+      skillDir: join(globalBase, "skills"),
     };
 
     const result = detectManageableScopes(projectTarget, globalTarget);
@@ -983,6 +996,7 @@ describe("detectManageableScopes", () => {
       scope: "project",
       agentDir: join(projectBase, ".opencode", "agent"),
       configPath: join(projectBase, ".opencode", "opencode.json"),
+      skillDir: join(projectBase, ".opencode", "skills"),
     };
     writeFileSync(projectTarget.configPath, "{ invalid json !!!", "utf-8");
 
@@ -993,6 +1007,7 @@ describe("detectManageableScopes", () => {
       scope: "global",
       agentDir: join(globalBase, "agent"),
       configPath: join(globalBase, "opencode.json"),
+      skillDir: join(globalBase, "skills"),
     };
     writeConfig(globalTarget.configPath, {
       $schema: "https://opencode.ai/config.json",

@@ -28,6 +28,7 @@ import {
   _resetSigintStateForTest,
 } from "../lib/ui.js";
 import { addManagedMarker, MANAGED_MARKER } from "../lib/agents.js";
+import { installCoreSkill } from "../lib/skills.js";
 import { readTemplate } from "../lib/templates.js";
 
 const EXIT_PROMPT_ERROR = { name: "ExitPromptError" };
@@ -39,6 +40,7 @@ function setupProjectFixture(opts?: {
   activeCustom?: string[];
   config?: Record<string, unknown>;
   manualFiles?: string[];
+  activeSkills?: string[];
 }): string {
   const tmp = mkdtempSync(join(tmpdir(), "uninstall-cmd-"));
   const agentDir = join(tmp, ".opencode", "agent");
@@ -64,6 +66,21 @@ function setupProjectFixture(opts?: {
       "utf-8"
     );
   }
+
+  // Pre-install core skills if requested
+  if (opts?.activeSkills) {
+    const skillDir = join(tmp, ".opencode", "skills");
+    const target = {
+      scope: "project" as const,
+      agentDir,
+      configPath,
+      skillDir,
+    };
+    for (const skillName of opts.activeSkills) {
+      installCoreSkill(skillName as any, target);
+    }
+  }
+
   return tmp;
 }
 
@@ -88,6 +105,7 @@ describe("uninstallCommand", () => {
     activeCustom?: string[];
     config?: Record<string, unknown>;
     manualFiles?: string[];
+    activeSkills?: string[];
   }): string {
     tmpRoot = setupProjectFixture(opts);
     process.chdir(tmpRoot);
@@ -344,6 +362,118 @@ describe("uninstallCommand", () => {
     // Managed files deleted.
     expect(existsSync(join(root, ".opencode", "agent", "developer.md"))).toBe(false);
     expect(existsSync(join(root, ".opencode", "agent", "reviewer.md"))).toBe(false);
+
+    logSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Skill-related uninstall tests (AC-07, AC-08, AC-11)
+  // ---------------------------------------------------------------------------
+
+  it("uninstall removes managed core skills alongside agents", async () => {
+    const root = chdirToFixture({
+      activeCustom: ["developer"],
+      activeSkills: ["cross-repo-architecture"],
+    });
+
+    vi.mocked(confirm).mockResolvedValueOnce(true);
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await uninstallCommand({ project: true });
+
+    // Managed agent file deleted
+    expect(
+      existsSync(join(root, ".opencode", "agent", "developer.md"))
+    ).toBe(false);
+
+    // Managed skill file deleted
+    const skillPath = join(
+      root, ".opencode", "skills", "cross-repo-architecture", "SKILL.md"
+    );
+    expect(existsSync(skillPath)).toBe(false);
+
+    // Skill directory cleaned up
+    const skillDir = join(root, ".opencode", "skills", "cross-repo-architecture");
+    expect(existsSync(skillDir)).toBe(false);
+
+    logSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  it("uninstall preserves unmarked skill files", async () => {
+    const root = chdirToFixture({
+      activeSkills: ["cross-repo-architecture"],
+    });
+
+    // Create a manual skill file without the managed marker
+    const manualSkillDir = join(root, ".opencode", "skills", "custom-skill");
+    mkdirSync(manualSkillDir, { recursive: true });
+    writeFileSync(
+      join(manualSkillDir, "SKILL.md"),
+      "# Custom skill\n",
+      "utf-8"
+    );
+
+    vi.mocked(confirm).mockResolvedValueOnce(true);
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await uninstallCommand({ project: true });
+
+    // Managed skill deleted
+    expect(
+      existsSync(join(root, ".opencode", "skills", "cross-repo-architecture", "SKILL.md"))
+    ).toBe(false);
+
+    // Unmarked skill preserved
+    expect(
+      existsSync(join(manualSkillDir, "SKILL.md"))
+    ).toBe(true);
+
+    const unmarkedContent = readFileSync(
+      join(manualSkillDir, "SKILL.md"), "utf-8"
+    );
+    expect(unmarkedContent).toBe("# Custom skill\n");
+
+    logSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  it("uninstall preserves unmarked core skill file (cross-repo-architecture without marker)", async () => {
+    const root = chdirToFixture({ activeCustom: ["developer"] });
+
+    // Create an unmarked core skill file (simulating user-created file without managed marker)
+    const skillDir = join(root, ".opencode", "skills", "cross-repo-architecture");
+    mkdirSync(skillDir, { recursive: true });
+    const skillPath = join(skillDir, "SKILL.md");
+    const userContent = "# My cross-repo notes\n## Custom content\n";
+    writeFileSync(skillPath, userContent, "utf-8");
+
+    vi.mocked(confirm).mockResolvedValueOnce(true);
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await uninstallCommand({ project: true });
+
+    // Managed agent file deleted
+    expect(
+      existsSync(join(root, ".opencode", "agent", "developer.md"))
+    ).toBe(false);
+
+    // Unmarked core skill preserved
+    expect(existsSync(skillPath)).toBe(true);
+    const content = readFileSync(skillPath, "utf-8");
+    expect(content).toBe(userContent);
+
+    // Warning about skipped skills
+    const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(output).toContain("Skip skills (unmarked)");
+    expect(output).toContain("cross-repo-architecture");
 
     logSpy.mockRestore();
     errorSpy.mockRestore();
