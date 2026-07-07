@@ -65,13 +65,26 @@ program
 
 program
   .command("uninstall")
-  .description("Remove managed custom agent files")
+  .description("Remove managed custom agent files and core skills")
   .option("--global", "Use global scope")
   .option("--project", "Use project scope")
   .option("-y, --yes", "Skip confirmation prompts")
   .action(runWithExitCode(async (options) => {
     await uninstallCommand(options);
   }));
+
+// ---------------------------------------------------------------------------
+// Technical debt (AC-10): Future CLI commands
+// ---------------------------------------------------------------------------
+// When optional skills are introduced, consider adding:
+// - `skills` command: list, install, update, delete optional skills
+//   (register in src/commands/skills.ts, add to the program below uninstall)
+// - `--update` flag on `init` to refresh managed agent/skill files to
+//   latest packaged versions without re-running the full guided flow
+// - Update/refresh semantics in src/lib/skills.ts for managed skill files
+// Core skill installation (auto-installed during init) and uninstall
+// already handle managed skills; the dedicated `skills` command would
+// handle optional/user-selected skills and independent update flows.
 
 setupGlobalSigintHandler();
 

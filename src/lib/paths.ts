@@ -8,6 +8,7 @@ export interface InstallTarget {
   scope: InstallScope;
   agentDir: string;
   configPath: string;
+  skillDir: string;
 }
 
 /**
@@ -22,6 +23,7 @@ export function resolveTarget(scope: InstallScope, cwd?: string): InstallTarget 
       scope: "project",
       agentDir: resolve(base, ".opencode", "agent"),
       configPath: resolve(base, ".opencode", "opencode.json"),
+      skillDir: resolve(base, ".opencode", "skills"),
     };
   }
 
@@ -30,6 +32,7 @@ export function resolveTarget(scope: InstallScope, cwd?: string): InstallTarget 
     scope: "global",
     agentDir: resolve(globalBase, "agent"),
     configPath: resolve(globalBase, "opencode.json"),
+    skillDir: resolve(globalBase, "skills"),
   };
 }
 
@@ -61,6 +64,20 @@ export const PACK_AGENTS = [
 ] as const;
 
 export type PackAgentName = (typeof PACK_AGENTS)[number];
+
+/**
+ * List of core managed skill names.
+ * Core skills are installed automatically with the workflow pack and are not
+ * optional. They use the same managed marker convention as agents.
+ *
+ * Future: optional skills (user-selectable at install time) are tracked as
+ * technical debt. See open questions in the cross-repo-architecture handoff.
+ */
+export const CORE_SKILLS = [
+  "cross-repo-architecture",
+] as const;
+
+export type CoreSkillName = (typeof CORE_SKILLS)[number];
 
 /**
  * Check if an agent name is a pack agent (has a .md template file).

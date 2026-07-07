@@ -10,6 +10,11 @@ import {
   deleteCustomAgent,
 } from "../lib/agents.js";
 import {
+  fileHasSkillMarker,
+  deleteCoreSkill,
+} from "../lib/skills.js";
+import { CORE_SKILLS, type CoreSkillName } from "../lib/paths.js";
+import {
   printHeader,
   printPaths,
   printWarning,
@@ -33,11 +38,15 @@ import { join, basename } from "node:path";
 interface UninstallPlan {
   managedToDelete: string[];
   unmarkedToSkip: string[];
+  skillsToDelete: string[];
+  skillsToSkip: string[];
 }
 
 interface UninstallResult {
   deleted: string[];
   skipped: string[];
+  skillsDeleted: string[];
+  skillsSkipped: string[];
 }
 
 /**
@@ -53,6 +62,8 @@ interface UninstallResult {
 function computeUninstallPlan(target: InstallTarget): UninstallPlan {
   const managedToDelete: string[] = [];
   const unmarkedToSkip: string[] = [];
+  const skillsToDelete: string[] = [];
+  const skillsToSkip: string[] = [];
 
   // Scan the agent directory for all .md files
   if (existsSync(target.agentDir)) {
@@ -75,12 +86,21 @@ function computeUninstallPlan(target: InstallTarget): UninstallPlan {
     }
   }
 
-  // Config entries are NOT cleaned during uninstall. Built-in agent
-  // config (disable, model) is preserved because we cannot distinguish
-  // user-set entries from opencode-path-set entries. Users can restore
-  // hidden built-in agents via `opencode-path agents` before uninstalling.
+  // Scan the skills directory for managed core skills
+  if (existsSync(target.skillDir)) {
+    for (const skillName of CORE_SKILLS) {
+      const skillFile = join(target.skillDir, skillName, "SKILL.md");
+      if (existsSync(skillFile)) {
+        if (fileHasSkillMarker(skillFile)) {
+          skillsToDelete.push(skillName);
+        } else {
+          skillsToSkip.push(skillName);
+        }
+      }
+    }
+  }
 
-  return { managedToDelete, unmarkedToSkip };
+  return { managedToDelete, unmarkedToSkip, skillsToDelete, skillsToSkip };
 }
 
 /**
@@ -107,6 +127,20 @@ function buildUninstallSummary(
         color: "yellow",
       });
     }
+    if (result.skillsDeleted.length > 0) {
+      lines.push({
+        label: "Skills deleted:",
+        value: result.skillsDeleted.join(", "),
+        color: "green",
+      });
+    }
+    if (result.skillsSkipped.length > 0) {
+      lines.push({
+        label: "Skills skipped:",
+        value: result.skillsSkipped.join(", "),
+        color: "yellow",
+      });
+    }
   } else {
     if (plan.managedToDelete.length > 0) {
       lines.push({
@@ -119,6 +153,20 @@ function buildUninstallSummary(
       lines.push({
         label: "Skip (unmarked):",
         value: plan.unmarkedToSkip.join(", "),
+        color: "dim",
+      });
+    }
+    if (plan.skillsToDelete.length > 0) {
+      lines.push({
+        label: "Delete skills:",
+        value: plan.skillsToDelete.join(", "),
+        color: "red",
+      });
+    }
+    if (plan.skillsToSkip.length > 0) {
+      lines.push({
+        label: "Skip skills (unmarked):",
+        value: plan.skillsToSkip.join(", "),
         color: "dim",
       });
     }
@@ -139,6 +187,8 @@ function applyUninstallPlan(
 ): UninstallResult {
   const deleted: string[] = [];
   const skipped: string[] = [...plan.unmarkedToSkip];
+  const skillsDeleted: string[] = [];
+  const skillsSkipped: string[] = [...plan.skillsToSkip];
 
   // Delete managed custom agent files
   for (const name of plan.managedToDelete) {
@@ -150,7 +200,17 @@ function applyUninstallPlan(
     }
   }
 
-  return { deleted, skipped };
+  // Delete managed core skill files
+  for (const skillName of plan.skillsToDelete) {
+    const wasDeleted = deleteCoreSkill(skillName as CoreSkillName, target);
+    if (wasDeleted) {
+      skillsDeleted.push(skillName);
+    } else {
+      skillsSkipped.push(skillName);
+    }
+  }
+
+  return { deleted, skipped, skillsDeleted, skillsSkipped };
 }
 
 // ---------------------------------------------------------------------------
@@ -183,10 +243,15 @@ export async function uninstallCommand(
   // Step 2: Compute plan
   const plan = computeUninstallPlan(target);
 
-  if (plan.managedToDelete.length === 0) {
+  if (plan.managedToDelete.length === 0 && plan.skillsToDelete.length === 0) {
     if (plan.unmarkedToSkip.length > 0) {
       printWarning(
         `Found ${plan.unmarkedToSkip.length} unmarked custom file(s) that will not be deleted: ${plan.unmarkedToSkip.join(", ")}`
+      );
+    }
+    if (plan.skillsToSkip.length > 0) {
+      printWarning(
+        `Found ${plan.skillsToSkip.length} unmarked skill file(s) that will not be deleted: ${plan.skillsToSkip.join(", ")}`
       );
     }
     printNoChanges();
@@ -226,6 +291,12 @@ export async function uninstallCommand(
   if (result.skipped.length > 0) {
     printWarning(
       `Unmarked files were not deleted: ${result.skipped.join(", ")}`
+    );
+  }
+
+  if (result.skillsSkipped.length > 0) {
+    printWarning(
+      `Unmarked skill files were not deleted: ${result.skillsSkipped.join(", ")}`
     );
   }
 

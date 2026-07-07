@@ -131,6 +131,7 @@ describe("text helpers", () => {
     printPaths({
       agentDir: "/project/.opencode/agent",
       configPath: "/project/.opencode/opencode.json",
+      skillDir: "/project/.opencode/skills",
     });
     const lines = logSpy.mock.calls.map((c) => c[0] as string);
     expect(lines.some((l) => l.includes("Agent dir:"))).toBe(true);
@@ -539,11 +540,13 @@ describe("resolveScope", () => {
       scope: "project" as const,
       agentDir: "/project/.opencode/agent",
       configPath: "/project/.opencode/opencode.json",
+      skillDir: "/project/.opencode/skills",
     };
     const globalTarget = {
       scope: "global" as const,
       agentDir: "/global/agent",
       configPath: "/global/opencode.json",
+      skillDir: "/global/skills",
     };
 
     await expect(
@@ -559,11 +562,13 @@ describe("resolveScope", () => {
       scope: "project" as const,
       agentDir: "/project/.opencode/agent",
       configPath: "/project/.opencode/opencode.json",
+      skillDir: "/project/.opencode/skills",
     };
     const globalTarget = {
       scope: "global" as const,
       agentDir: "/global/agent",
       configPath: "/global/opencode.json",
+      skillDir: "/global/skills",
     };
 
     await expect(
@@ -579,11 +584,13 @@ describe("resolveScope", () => {
       scope: "project" as const,
       agentDir: "/project/.opencode/agent",
       configPath: "/project/.opencode/opencode.json",
+      skillDir: "/project/.opencode/skills",
     };
     const globalTarget = {
       scope: "global" as const,
       agentDir: "/global/agent",
       configPath: "/global/opencode.json",
+      skillDir: "/global/skills",
     };
 
     // Bypass the non-interactive mode check by making stdin appear interactive.
@@ -620,11 +627,13 @@ describe("resolveScope", () => {
       scope: "project" as const,
       agentDir: "/project/.opencode/agent",
       configPath: "/project/.opencode/opencode.json",
+      skillDir: "/project/.opencode/skills",
     };
     const globalTarget = {
       scope: "global" as const,
       agentDir: "/global/agent",
       configPath: "/global/opencode.json",
+      skillDir: "/global/skills",
     };
 
     const scope = await resolveScope(
