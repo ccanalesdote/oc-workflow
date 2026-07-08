@@ -264,4 +264,147 @@ describe("template permission invariants", () => {
       expect(exitGate.toLowerCase()).toContain(abbrev);
     }
   });
+
+  // -----------------------------------------------------------------------
+  // Permission invariant: architect.md handoff edit rules (AC-03)
+  // -----------------------------------------------------------------------
+
+  describe("architect.md permission edit rules (AC-03)", () => {
+    const architectPatterns = [
+      ".path/work/*/brief.md",
+      ".path/work/*/tasks.md",
+      ".path/work/*/progress.md",
+      ".path/work/*/repos/*.md",
+      "../*/.path/work/*/brief.md",
+      "../*/.path/work/*/tasks.md",
+      "../*/.path/work/*/progress.md",
+      "../*/.path/work/*/repos/*.md",
+      "**/.path/work/*/brief.md",
+      "**/.path/work/*/tasks.md",
+      "**/.path/work/*/progress.md",
+      "**/.path/work/*/repos/*.md",
+    ];
+
+    it('edit permission has broad deny first: edit["*"] === "deny"', () => {
+      const content = readTemplate("architect");
+      const { frontmatter } = parseFrontmatter(content);
+      const perm = frontmatter.permission as Record<string, unknown>;
+      const edit = perm.edit as Record<string, string>;
+      expect(edit["*"]).toBe("deny");
+    });
+
+    it("allows every required handoff edit pattern with value 'allow'", () => {
+      const content = readTemplate("architect");
+      const { frontmatter } = parseFrontmatter(content);
+      const perm = frontmatter.permission as Record<string, unknown>;
+      const edit = perm.edit as Record<string, string>;
+
+      for (const pattern of architectPatterns) {
+        expect(edit[pattern] === "allow",
+          `Expected architect edit rule "${pattern}" to be "allow", got "${edit[pattern]}"`
+        ).toBe(true);
+      }
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Permission invariant: auditor.md handoff edit rules (AC-04)
+  // -----------------------------------------------------------------------
+
+  describe("auditor.md permission edit rules (AC-04)", () => {
+    const auditorAllowPatterns = [
+      ".path/work/*/tasks.md",
+      ".path/work/*/progress.md",
+      "**/.path/work/*/tasks.md",
+      "**/.path/work/*/progress.md",
+    ];
+
+    const auditorMustNotHave = [
+      "brief.md",
+      "repos/",
+    ];
+
+    it('edit permission has broad deny first: edit["*"] === "deny"', () => {
+      const content = readTemplate("auditor");
+      const { frontmatter } = parseFrontmatter(content);
+      const perm = frontmatter.permission as Record<string, unknown>;
+      const edit = perm.edit as Record<string, string>;
+      expect(edit["*"]).toBe("deny");
+    });
+
+    it("allows only tasks.md and progress.md in relative and globstar forms", () => {
+      const content = readTemplate("auditor");
+      const { frontmatter } = parseFrontmatter(content);
+      const perm = frontmatter.permission as Record<string, unknown>;
+      const edit = perm.edit as Record<string, string>;
+
+      for (const pattern of auditorAllowPatterns) {
+        expect(edit[pattern] === "allow",
+          `Expected auditor edit rule "${pattern}" to be "allow", got "${edit[pattern]}"`
+        ).toBe(true);
+      }
+    });
+
+    it("does not contain auditor allow rules for brief.md or repos/*.md", () => {
+      const content = readTemplate("auditor");
+      const { frontmatter } = parseFrontmatter(content);
+      const perm = frontmatter.permission as Record<string, unknown>;
+      const edit = perm.edit as Record<string, string>;
+
+      const editKeys = Object.keys(edit).filter((k) => k !== "*");
+      for (const key of editKeys) {
+        for (const prohibited of auditorMustNotHave) {
+          expect(key.includes(prohibited),
+            `Auditor edit rule "${key}" must not contain "${prohibited}"`
+          ).toBe(false);
+        }
+      }
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Permission invariant: developer.md and reviewer.md unchanged (AC-05)
+  // -----------------------------------------------------------------------
+
+  describe("developer.md and reviewer.md permissions unchanged (AC-05)", () => {
+    it("developer.md edit permission is exactly 'allow' with no sub-rules", () => {
+      const content = readTemplate("developer");
+      const { frontmatter } = parseFrontmatter(content);
+      const perm = frontmatter.permission as Record<string, unknown>;
+
+      // developer.md has `edit: allow` — a bare string, not an object with rules
+      expect(perm.edit).toBe("allow");
+
+      // If it ever becomes an object, verify no globstar .path patterns exist
+      if (typeof perm.edit === "object" && perm.edit !== null) {
+        const edit = perm.edit as Record<string, string>;
+        const editKeys = Object.keys(edit);
+        for (const key of editKeys) {
+          expect(key.startsWith("**/.path/"),
+            `developer.md edit rule "${key}" must not use globstar .path/ pattern`
+          ).toBe(false);
+        }
+      }
+    });
+
+    it("reviewer.md edit permission is exactly 'deny' with no sub-rules", () => {
+      const content = readTemplate("reviewer");
+      const { frontmatter } = parseFrontmatter(content);
+      const perm = frontmatter.permission as Record<string, unknown>;
+
+      // reviewer.md has `edit: deny` — a bare string, not an object with rules
+      expect(perm.edit).toBe("deny");
+
+      // If it ever becomes an object, verify no globstar .path patterns exist
+      if (typeof perm.edit === "object" && perm.edit !== null) {
+        const edit = perm.edit as Record<string, string>;
+        const editKeys = Object.keys(edit);
+        for (const key of editKeys) {
+          expect(key.startsWith("**/.path/"),
+            `reviewer.md edit rule "${key}" must not use globstar .path/ pattern`
+          ).toBe(false);
+        }
+      }
+    });
+  });
 });

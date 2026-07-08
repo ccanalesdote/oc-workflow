@@ -6,6 +6,8 @@ permission:
     "*": "deny"
     ".path/work/*/tasks.md": "allow"
     ".path/work/*/progress.md": "allow"
+    "**/.path/work/*/tasks.md": "allow"
+    "**/.path/work/*/progress.md": "allow"
   bash:
     # Default: ask for anything not explicitly allowed or denied
     "*": "ask"

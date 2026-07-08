@@ -1,3 +1,8 @@
+---
+name: cross-repo-architecture
+description: Use when a feature or task spans multiple Git repositories, services, packages, frontends, backends, or deployment units, or when an API/contract is shared across teams or repos. Defines the cross-repo handoff protocol Architect uses to produce a parent-level coordination brief plus one contract-bound draft per affected repo, and the boundary between shared (binding) decisions and repo-local decisions.
+---
+
 # Cross-Repo Architecture
 
 This skill is loaded by Architect when a feature affects **multiple repositories, services, packages, frontends, backends, or deployment units**. It defines the cross-repo handoff protocol and separates decisions that Architect must own from decisions that repo-local Architect may decide independently.

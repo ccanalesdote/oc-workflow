@@ -19,6 +19,7 @@ import {
   updateCoreSkill,
   deleteCoreSkill,
 } from "./skills.js";
+import { parseFrontmatter } from "./frontmatter.js";
 import {
   readFileSync,
   writeFileSync,
@@ -112,6 +113,83 @@ describe("validateAllSkillTemplates", () => {
   it("returns empty array when all skills are valid", () => {
     const errors = validateAllSkillTemplates();
     expect(errors).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Skill template frontmatter (AC-01, AC-02)
+// ---------------------------------------------------------------------------
+
+describe("skill template frontmatter", () => {
+  it("cross-repo-architecture SKILL.md has valid YAML frontmatter (AC-01)", () => {
+    const content = readSkillTemplate("cross-repo-architecture");
+    const { frontmatter, body } = parseFrontmatter(content);
+
+    // Frontmatter exists and has required fields
+    expect(frontmatter).toBeDefined();
+    expect(frontmatter.name).toBe("cross-repo-architecture");
+
+    const desc = frontmatter.description;
+    expect(typeof desc).toBe("string");
+    expect((desc as string).length).toBeGreaterThan(0);
+
+    // Body still contains the expected heading and marker
+    expect(body).toContain("# Cross-Repo Architecture");
+    expect(body).toContain(MANAGED_SKILL_MARKER);
+  });
+
+  it("installed skill preserves frontmatter and managed marker (AC-02)", () => {
+    const target = fixtureTarget();
+    const result = installCoreSkill("cross-repo-architecture", target);
+    expect(result).toBe("created");
+
+    const filePath = getSkillInstallPath("cross-repo-architecture", target);
+    const content = readFileSync(filePath, "utf-8");
+
+    // Frontmatter is preserved
+    const { frontmatter, body } = parseFrontmatter(content);
+    expect(frontmatter.name).toBe("cross-repo-architecture");
+    expect(typeof frontmatter.description).toBe("string");
+    expect((frontmatter.description as string).length).toBeGreaterThan(0);
+
+    // Body content and marker are preserved
+    expect(body).toContain("# Cross-Repo Architecture");
+    expect(body).toContain(MANAGED_SKILL_MARKER);
+  });
+
+  it("updateCoreSkill preserves frontmatter through update cycle (AC-02)", () => {
+    const target = fixtureTarget();
+    installCoreSkill("cross-repo-architecture", target);
+
+    // Simulate older version
+    const filePath = getSkillInstallPath("cross-repo-architecture", target);
+    writeFileSync(
+      filePath,
+      `---
+name: cross-repo-architecture
+description: Old description.
+---
+# Old content
+${MANAGED_SKILL_MARKER}
+`,
+      "utf-8"
+    );
+
+    const result = updateCoreSkill("cross-repo-architecture", target);
+    expect(result).toBe("updated");
+
+    const content = readFileSync(filePath, "utf-8");
+    const { frontmatter, body } = parseFrontmatter(content);
+
+    // Updated frontmatter has current description
+    expect(frontmatter.name).toBe("cross-repo-architecture");
+    expect(typeof frontmatter.description).toBe("string");
+    expect((frontmatter.description as string)).not.toBe("Old description.");
+    expect((frontmatter.description as string).length).toBeGreaterThan(0);
+
+    // Body is updated to current template
+    expect(body).toContain("# Cross-Repo Architecture");
+    expect(body).toContain(MANAGED_SKILL_MARKER);
   });
 });
 
