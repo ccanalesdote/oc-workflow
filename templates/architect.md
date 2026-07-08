@@ -12,6 +12,10 @@ permission:
     "../*/.path/work/*/tasks.md": "allow"
     "../*/.path/work/*/progress.md": "allow"
     "../*/.path/work/*/repos/*.md": "allow"
+    "**/.path/work/*/brief.md": "allow"
+    "**/.path/work/*/tasks.md": "allow"
+    "**/.path/work/*/progress.md": "allow"
+    "**/.path/work/*/repos/*.md": "allow"
   bash:
     "*": "deny"
     "mkdir -p .path/work/*": "allow"
