@@ -1,19 +1,28 @@
 /**
- * Managed core skill domain module.
+ * Managed skill domain module.
  *
- * Centralizes catalog, state detection, and mutate operations for core skills
- * that opencode-path manages. Core skills are installed automatically during
- * init and use the same managed marker convention as agents.
- *
- * Future: optional skills, update/refresh, and a dedicated `skills` command
- * are tracked as technical debt (AC-10).
+ * Centralizes catalog, state detection, and mutate operations for managed
+ * skills that opencode-path manages (both core and optional). Core skills
+ * are installed automatically during init; optional skills are user-selectable.
+ * Both use the same managed marker convention as agents.
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync, rmdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dirname as _dirname, resolve } from "node:path";
-import { CORE_SKILLS, type CoreSkillName, type InstallTarget } from "./paths.js";
+import { parseFrontmatter } from "./frontmatter.js";
+import {
+  CORE_SKILLS,
+  OPTIONAL_SKILLS,
+  ALL_MANAGED_SKILLS,
+  isCoreSkill,
+  isOptionalSkill,
+  type CoreSkillName,
+  type OptionalSkillName,
+  type ManagedSkillName,
+  type InstallTarget,
+} from "./paths.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -59,21 +68,21 @@ export function getSkillTemplatesDir(): string {
 /**
  * Get the full path to a packaged skill template directory.
  */
-export function getSkillTemplateDir(skillName: CoreSkillName): string {
+export function getSkillTemplateDir(skillName: ManagedSkillName): string {
   return join(getSkillTemplatesDir(), skillName);
 }
 
 /**
  * Get the full path to a packaged SKILL.md file.
  */
-export function getSkillTemplatePath(skillName: CoreSkillName): string {
+export function getSkillTemplatePath(skillName: ManagedSkillName): string {
   return join(getSkillTemplateDir(skillName), SKILL_FILE);
 }
 
 /**
  * Read a packaged skill template as a string.
  */
-export function readSkillTemplate(skillName: CoreSkillName): string {
+export function readSkillTemplate(skillName: ManagedSkillName): string {
   const templatePath = getSkillTemplatePath(skillName);
   if (!existsSync(templatePath)) {
     throw new Error(`Skill template not found: ${templatePath}`);
@@ -83,11 +92,11 @@ export function readSkillTemplate(skillName: CoreSkillName): string {
 
 /**
  * List available packaged skill template names.
- * Only returns names that exist in CORE_SKILLS and have a SKILL.md file.
+ * Only returns names that exist in ALL_MANAGED_SKILLS and have a SKILL.md file.
  */
-export function listSkillTemplates(): CoreSkillName[] {
-  const found: CoreSkillName[] = [];
-  for (const name of CORE_SKILLS) {
+export function listSkillTemplates(): ManagedSkillName[] {
+  const found: ManagedSkillName[] = [];
+  for (const name of ALL_MANAGED_SKILLS) {
     const templatePath = getSkillTemplatePath(name);
     if (existsSync(templatePath)) {
       found.push(name);
@@ -98,14 +107,43 @@ export function listSkillTemplates(): CoreSkillName[] {
 
 /**
  * Validate all packaged skill templates.
- * Checks that each core skill has a readable SKILL.md file.
+ * Checks that each managed skill has a readable SKILL.md file with valid
+ * frontmatter (matching name, non-empty description) and the managed marker.
  * Returns an array of error messages (empty if all valid).
  */
 export function validateAllSkillTemplates(): string[] {
   const errors: string[] = [];
-  for (const name of CORE_SKILLS) {
+  for (const name of ALL_MANAGED_SKILLS) {
     try {
-      readSkillTemplate(name);
+      const content = readSkillTemplate(name);
+
+      // Validate frontmatter
+      const { frontmatter, body } = parseFrontmatter(content);
+
+      if (!frontmatter || typeof frontmatter !== "object") {
+        errors.push(`${name}/SKILL.md: missing or invalid frontmatter`);
+        continue;
+      }
+
+      if (frontmatter.name !== name) {
+        errors.push(
+          `${name}/SKILL.md: frontmatter name "${String(frontmatter.name)}" does not match skill directory "${name}"`
+        );
+      }
+
+      const desc = frontmatter.description;
+      if (typeof desc !== "string" || desc.trim().length === 0) {
+        errors.push(
+          `${name}/SKILL.md: frontmatter description is missing or empty`
+        );
+      }
+
+      // Validate managed marker
+      if (!body.includes(MANAGED_SKILL_MARKER)) {
+        errors.push(
+          `${name}/SKILL.md: missing managed marker "${MANAGED_SKILL_MARKER}"`
+        );
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       errors.push(`${name}/SKILL.md: ${message}`);
@@ -153,26 +191,44 @@ export function addSkillMarker(content: string): string {
 // Catalog
 // ---------------------------------------------------------------------------
 
+/** Whether a managed skill is core or optional. */
+export type ManagedSkillKind = "core" | "optional";
+
 /** State of a managed skill at a given target. */
 export type SkillState = "active" | "missing" | "conflict";
 
 /** A managed skill entry with its resolved state at a specific target. */
 export interface ManagedSkillStatus {
-  name: CoreSkillName;
+  name: ManagedSkillName;
   state: SkillState;
+  kind: ManagedSkillKind;
 }
 
 /**
- * Build the full managed skill catalog from CORE_SKILLS.
+ * Build the full managed skill catalog from ALL_MANAGED_SKILLS.
  */
-export function listManagedSkillCatalog(): CoreSkillName[] {
+export function listManagedSkillCatalog(): ManagedSkillName[] {
+  return [...ALL_MANAGED_SKILLS];
+}
+
+/**
+ * Get only the core skill names from the catalog.
+ */
+export function listCoreSkillCatalog(): CoreSkillName[] {
   return [...CORE_SKILLS];
+}
+
+/**
+ * Get only the optional skill names from the catalog.
+ */
+export function listOptionalSkillCatalog(): OptionalSkillName[] {
+  return [...OPTIONAL_SKILLS];
 }
 
 /**
  * Get the install path for a managed skill at a target.
  */
-export function getSkillInstallPath(skillName: CoreSkillName, target: InstallTarget): string {
+export function getSkillInstallPath(skillName: ManagedSkillName, target: InstallTarget): string {
   return join(target.skillDir, skillName, SKILL_FILE);
 }
 
@@ -184,7 +240,7 @@ export function getSkillInstallPath(skillName: CoreSkillName, target: InstallTar
  * - `conflict` — file exists but lacks managed marker
  */
 export function getSkillState(
-  skillName: CoreSkillName,
+  skillName: ManagedSkillName,
   target: InstallTarget
 ): SkillState {
   const filePath = getSkillInstallPath(skillName, target);
@@ -200,6 +256,7 @@ export function listManagedSkillStatuses(target: InstallTarget): ManagedSkillSta
   return listManagedSkillCatalog().map((name) => ({
     name,
     state: getSkillState(name, target),
+    kind: isCoreSkill(name) ? "core" : "optional",
   }));
 }
 
@@ -220,7 +277,7 @@ export function listActiveManagedSkills(target: InstallTarget): ManagedSkillStat
 export type SkillInstallResult = "created" | "conflict" | "already_active";
 
 /**
- * Install a managed core skill: write the template with the managed marker.
+ * Install a managed skill: write the template with the managed marker.
  * Creates the skill directory (e.g., `.opencode/skills/<name>/`) if needed.
  *
  * Returns:
@@ -228,8 +285,8 @@ export type SkillInstallResult = "created" | "conflict" | "already_active";
  * - "conflict"    — file exists without managed marker, refused to overwrite
  * - "already_active" — file already exists with managed marker (no-op)
  */
-export function installCoreSkill(
-  skillName: CoreSkillName,
+export function installManagedSkill(
+  skillName: ManagedSkillName,
   target: InstallTarget
 ): SkillInstallResult {
   const filePath = getSkillInstallPath(skillName, target);
@@ -256,17 +313,29 @@ export function installCoreSkill(
 }
 
 /**
- * Update a managed core skill: overwrite the existing managed file with the
+ * Install a managed core skill. Convenience wrapper around installManagedSkill
+ * that accepts CoreSkillName for type safety at call sites that should only
+ * install core skills.
+ */
+export function installCoreSkill(
+  skillName: CoreSkillName,
+  target: InstallTarget
+): SkillInstallResult {
+  return installManagedSkill(skillName, target);
+}
+
+/**
+ * Update a managed skill: overwrite the existing managed file with the
  * latest packaged template. Only updates files that have the managed marker
  * (safe guard against overwriting user-modified skills).
  *
  * Returns:
  * - "updated"        — managed file was overwritten with the latest template
  * - "not_managed"   — file exists but lacks managed marker; refused to touch
- * - "not_installed" — file does not exist; call installCoreSkill instead
+ * - "not_installed" — file does not exist; call installManagedSkill instead
  */
-export function updateCoreSkill(
-  skillName: CoreSkillName,
+export function updateManagedSkill(
+  skillName: ManagedSkillName,
   target: InstallTarget
 ): "updated" | "not_managed" | "not_installed" {
   const filePath = getSkillInstallPath(skillName, target);
@@ -281,13 +350,13 @@ export function updateCoreSkill(
 }
 
 /**
- * Delete a managed core skill file.
+ * Delete a managed skill file.
  * Only deletes if the file has the managed marker (safe guard).
  * Also removes the parent skill directory if empty after deletion.
  * Returns true if deleted, false if not found or not managed.
  */
-export function deleteCoreSkill(
-  skillName: CoreSkillName,
+export function deleteManagedSkill(
+  skillName: ManagedSkillName,
   target: InstallTarget
 ): boolean {
   const filePath = getSkillInstallPath(skillName, target);
@@ -309,4 +378,28 @@ export function deleteCoreSkill(
   }
 
   return true;
+}
+
+/**
+ * Delete a managed core skill file. Convenience wrapper around deleteManagedSkill
+ * that accepts CoreSkillName for type safety at call sites that should only
+ * delete core skills.
+ */
+export function deleteCoreSkill(
+  skillName: CoreSkillName,
+  target: InstallTarget
+): boolean {
+  return deleteManagedSkill(skillName, target);
+}
+
+/**
+ * Update a managed core skill. Convenience wrapper around updateManagedSkill
+ * that accepts CoreSkillName for type safety at call sites that should only
+ * update core skills.
+ */
+export function updateCoreSkill(
+  skillName: CoreSkillName,
+  target: InstallTarget
+): "updated" | "not_managed" | "not_installed" {
+  return updateManagedSkill(skillName, target);
 }

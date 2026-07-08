@@ -69,15 +69,61 @@ export type PackAgentName = (typeof PACK_AGENTS)[number];
  * List of core managed skill names.
  * Core skills are installed automatically with the workflow pack and are not
  * optional. They use the same managed marker convention as agents.
- *
- * Future: optional skills (user-selectable at install time) are tracked as
- * technical debt. See open questions in the cross-repo-architecture handoff.
  */
 export const CORE_SKILLS = [
   "cross-repo-architecture",
 ] as const;
 
 export type CoreSkillName = (typeof CORE_SKILLS)[number];
+
+/**
+ * List of optional managed skill names.
+ * Optional skills are user-selectable and are not installed automatically.
+ * They use the same managed marker convention as agents and core skills.
+ */
+export const OPTIONAL_SKILLS = [
+  "migration-and-data-change",
+  "api-contracts",
+  "security-boundary-review",
+  "incident-recovery",
+  "test-strategy",
+] as const;
+
+export type OptionalSkillName = (typeof OPTIONAL_SKILLS)[number];
+
+/**
+ * Union of all managed skill names (core + optional).
+ */
+export type ManagedSkillName = CoreSkillName | OptionalSkillName;
+
+/**
+ * All managed skill names (core + optional), in catalog order.
+ */
+export const ALL_MANAGED_SKILLS: readonly ManagedSkillName[] = [
+  ...CORE_SKILLS,
+  ...OPTIONAL_SKILLS,
+];
+
+/**
+ * Type guard: check if a skill name is a core skill.
+ */
+export function isCoreSkill(name: string): name is CoreSkillName {
+  return (CORE_SKILLS as readonly string[]).includes(name);
+}
+
+/**
+ * Type guard: check if a skill name is an optional skill.
+ */
+export function isOptionalSkill(name: string): name is OptionalSkillName {
+  return (OPTIONAL_SKILLS as readonly string[]).includes(name);
+}
+
+/**
+ * Check if a skill name is a managed skill (core or optional).
+ */
+export function isManagedSkill(name: string): name is ManagedSkillName {
+  return isCoreSkill(name) || isOptionalSkill(name);
+}
 
 /**
  * Check if an agent name is a pack agent (has a .md template file).

@@ -73,6 +73,17 @@ Your job is to read code, verify it against the Implementation Contract and acce
 
 Reviewer is the implementation quality gate. Developer invokes Reviewer at each checkpoint closure and at final feature review when a work folder defines checkpoints. For work without checkpoints (direct-chat or simple tasks), Developer invokes Reviewer as the final quality gate before declaring work done. Reviewer is not invoked after every isolated mechanical task.
 
+## Optional skill activation
+
+Reviewer may load the following managed skills when the implementation under review touches the corresponding area. Do not inline each skill's full protocol here; load the skill to get its detailed review checklist.
+
+- `migration-and-data-change` — load when the diff includes schema changes, data migrations, or backfills. Verify each migration step has a rollback path (or documented acceptance of irreversibility), verification steps are present, and data integrity checks pass.
+- `api-contracts` — load when the diff changes API endpoints, schemas, or contracts. Verify endpoints match the contract (paths, methods, status codes, shapes), auth requirements are enforced, and error formats match.
+- `security-boundary-review` — load when the diff touches auth, authorization, data exposure, or input validation. Verify auth checks exist, no secrets in the diff, input is validated, and error messages do not leak internals.
+- `test-strategy` — load when reviewing test coverage and verification. Verify every acceptance criterion has a test, tests pass, edge cases are covered, and test data contains no real secrets or PII.
+
+Reviewer does not directly invoke `incident-recovery`; that skill is for incident response and post-incident audit.
+
 ## Review scope
 
 When a work folder is present and defines checkpoints in `tasks.md`:

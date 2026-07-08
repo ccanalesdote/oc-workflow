@@ -4,6 +4,7 @@ import {
   resolveTarget,
   type InstallScope,
   type InstallTarget,
+  isCoreSkill,
 } from "../lib/paths.js";
 import { createOrMergeConfig } from "../lib/config.js";
 import {
@@ -34,7 +35,9 @@ import {
 import { validateAllTemplates } from "../lib/templates.js";
 import {
   installCoreSkill,
+  installManagedSkill,
   listManagedSkillStatuses,
+  validateAllSkillTemplates,
   type ManagedSkillStatus,
 } from "../lib/skills.js";
 import {
@@ -65,16 +68,9 @@ import {
 import * as messages from "../lib/messages.js";
 
 // ---------------------------------------------------------------------------
-// Technical debt (AC-10): Future init expansion
-// ---------------------------------------------------------------------------
-// When optional skills are introduced, `init` should gain an optional
-// skill-selection step (similar to today's agent-selection step) that lets
-// users pick which optional skills to install alongside the always-installed
-// core skills. This should be implemented after optional skills exist and
-// a dedicated `skills` command is available.
-//
-// The current core-skill installation (unconditional, no prompts) is
-// intentionally simple. Do not expand it until optional skills are defined.
+// Optional skill installation (Step 3b) was implemented under the optional-skills
+// feature. Core skills are auto-installed; optional skills are user-selectable
+// and are unchecked by default. --yes does not install them by surprise.
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -107,6 +103,7 @@ interface InitPlan {
   modelAssignments: { agent: ManagedAgentStatus; model: string }[];
   target: InstallTarget;
   skillStatuses: ManagedSkillStatus[];
+  selectedOptionalSkills: ManagedSkillStatus[];
 }
 
 interface InitApplyResult {
@@ -126,6 +123,11 @@ interface InitApplyResult {
     failed: string[];
   };
   skillResult: {
+    installed: string[];
+    unchanged: string[];
+    conflicts: string[];
+  };
+  optionalSkillResult: {
     installed: string[];
     unchanged: string[];
     conflicts: string[];
@@ -368,6 +370,31 @@ function buildConsolidatedSummary(
     });
   }
 
+  // Optional skills (user-selected)
+  if (plan.selectedOptionalSkills.length > 0) {
+    const optionalToInstall = plan.selectedOptionalSkills.filter((s) => s.state === "missing");
+    const optionalActive = plan.selectedOptionalSkills.filter((s) => s.state === "active");
+    if (optionalToInstall.length > 0) {
+      lines.push({
+        label: "Optional skills:",
+        value: optionalToInstall.map((s) => s.name).join(", "),
+        color: "green",
+      });
+    } else if (optionalActive.length > 0) {
+      lines.push({
+        label: "Optional skills:",
+        value: "already installed",
+        color: "dim",
+      });
+    }
+  } else {
+    lines.push({
+      label: "Optional skills:",
+      value: "skipped",
+      color: "yellow",
+    });
+  }
+
   return lines;
 }
 
@@ -379,9 +406,14 @@ function hasPlannedChanges(plan: InitPlan): boolean {
 
   const hasSkillChanges = plan.skillStatuses.some((s) => s.state === "missing");
 
+  const hasOptionalSkillChanges = plan.selectedOptionalSkills.some(
+    (s) => s.state === "missing"
+  );
+
   return (
     hasAgentChanges ||
     hasSkillChanges ||
+    hasOptionalSkillChanges ||
     plan.selectedProfiles.length > 0 ||
     plan.modelAssignments.length > 0
   );
@@ -400,6 +432,7 @@ async function applyPlan(
     profileResult: { applied: [], skipped: [], failed: [] },
     modelResult: { configured: [], failed: [] },
     skillResult: { installed: [], unchanged: [], conflicts: [] },
+    optionalSkillResult: { installed: [], unchanged: [], conflicts: [] },
   };
 
   // 1. Apply agent changes
@@ -428,6 +461,7 @@ async function applyPlan(
     await applyPhaseCheckpoint();
     if (skill.state === "missing") {
       try {
+        if (!isCoreSkill(skill.name)) continue;
         const installResult = installCoreSkill(skill.name, plan.target);
         if (installResult === "created") {
           result.skillResult.installed.push(skill.name);
@@ -443,6 +477,30 @@ async function applyPlan(
       result.skillResult.unchanged.push(skill.name);
     } else if (skill.state === "conflict") {
       result.skillResult.conflicts.push(skill.name);
+    }
+  }
+
+  // 2b. Install selected optional skills
+  await applyPhaseCheckpoint();
+  for (const skill of plan.selectedOptionalSkills) {
+    await applyPhaseCheckpoint();
+    if (skill.state === "missing") {
+      try {
+        const installResult = installManagedSkill(skill.name, plan.target);
+        if (installResult === "created") {
+          result.optionalSkillResult.installed.push(skill.name);
+        } else if (installResult === "conflict") {
+          result.optionalSkillResult.conflicts.push(skill.name);
+        } else {
+          result.optionalSkillResult.unchanged.push(skill.name);
+        }
+      } catch {
+        result.optionalSkillResult.conflicts.push(skill.name);
+      }
+    } else if (skill.state === "active") {
+      result.optionalSkillResult.unchanged.push(skill.name);
+    } else if (skill.state === "conflict") {
+      result.optionalSkillResult.conflicts.push(skill.name);
     }
   }
 
@@ -534,6 +592,21 @@ export async function initCommand(
     process.exit(1);
   }
 
+  // Validate skill templates before installing skills
+  const skillTemplateErrors = validateAllSkillTemplates();
+  if (skillTemplateErrors.length > 0) {
+    printError(
+      `   Malformed skill template detected:`
+    );
+    for (const err of skillTemplateErrors) {
+      console.error(`     • ${err}`);
+    }
+    console.error(
+      `\n   Fix the skill template files and re-run init.\n`
+    );
+    process.exit(1);
+  }
+
   // Step 1: Resolve scope
   const projectTarget = resolveTarget("project");
   const globalTarget = resolveTarget("global");
@@ -567,9 +640,11 @@ export async function initCommand(
     );
   }
 
-  // Scan skill state for conflicts
-  const skillStatuses = listManagedSkillStatuses(target);
-  const conflictSkills = skillStatuses.filter((s) => s.state === "conflict");
+  // Scan skill state for conflicts (core skills only; optional skills are handled
+  // by the dedicated `skills` command, not by init)
+  const allSkillStatuses = listManagedSkillStatuses(target);
+  const coreSkillStatuses = allSkillStatuses.filter((s) => s.kind === "core");
+  const conflictSkills = coreSkillStatuses.filter((s) => s.state === "conflict");
 
   if (conflictSkills.length > 0) {
     printWarning(
@@ -588,7 +663,8 @@ export async function initCommand(
     selectedProfiles: [],
     modelAssignments: [],
     target,
-    skillStatuses,
+    skillStatuses: coreSkillStatuses,
+    selectedOptionalSkills: [],
   };
 
   // Step 3: Agent selection (AC-03, AC-06, AC-07)
@@ -642,6 +718,60 @@ export async function initCommand(
     }
 
     plan.agentChanges = computeAgentChanges(statuses, selectedSet);
+  }
+
+  // Step 3b: Optional skill selection (AC-03, AC-04)
+  // Core skills are auto-installed; optional skills are unchecked by default.
+  // --yes must NOT install optional skills by surprise.
+  // Conflicting (unmarked) optional skills are excluded from selection.
+  const optionalSkillStatuses = allSkillStatuses.filter((s) => s.kind === "optional");
+  const optionalConflictSkills = optionalSkillStatuses.filter((s) => s.state === "conflict");
+  const selectableOptionalSkills = optionalSkillStatuses.filter((s) => s.state !== "conflict");
+  const SKIP_OPTIONAL_SKILLS_VALUE = "__skip_optional_skills__";
+
+  if (optionalConflictSkills.length > 0) {
+    printWarning(
+      `Conflicting optional skills (manual files without managed marker): ${optionalConflictSkills
+        .map((s) => s.name)
+        .join(", ")}`
+    );
+    console.log(
+      "     They cannot be managed here. Resolve manually or add the marker.\n"
+    );
+  }
+
+  if (selectableOptionalSkills.length > 0 && !options.yes) {
+    const skillSelection = await uiSelect<string>(
+      "Optional skills:",
+      [
+        {
+          value: "__select__",
+          name: "Select optional skills to install...",
+          description: `${selectableOptionalSkills.filter((s) => s.state === "active").length} active, ${selectableOptionalSkills.filter((s) => s.state === "missing").length} available`,
+        },
+        {
+          value: SKIP_OPTIONAL_SKILLS_VALUE,
+          name: dimText("Skip for now"),
+        },
+      ]
+    );
+
+    if (skillSelection !== SKIP_OPTIONAL_SKILLS_VALUE) {
+      const selectedSkillNames = await uiCheckbox<string>(
+        "Select optional skills to install (space to toggle, enter to confirm):",
+        selectableOptionalSkills.map((skill) => ({
+          value: skill.name as string,
+          name: skill.name,
+          checked: false, // missing optional skills are unchecked by default
+        })),
+        { required: false }
+      );
+
+      const selectedSet = new Set(selectedSkillNames);
+      plan.selectedOptionalSkills = selectableOptionalSkills.filter((s) =>
+        selectedSet.has(s.name)
+      );
+    }
   }
 
   // Step 4: Profile selection (AC-04, AC-06, AC-07)
@@ -935,6 +1065,20 @@ export async function initCommand(
     resultLines.push({
       label: "Skill conflicts:",
       value: applyResult.skillResult.conflicts.join(", "),
+      color: "red",
+    });
+  }
+  if (applyResult.optionalSkillResult.installed.length > 0) {
+    resultLines.push({
+      label: "Optional skills installed:",
+      value: applyResult.optionalSkillResult.installed.join(", "),
+      color: "green",
+    });
+  }
+  if (applyResult.optionalSkillResult.conflicts.length > 0) {
+    resultLines.push({
+      label: "Optional skill conflicts:",
+      value: applyResult.optionalSkillResult.conflicts.join(", "),
       color: "red",
     });
   }

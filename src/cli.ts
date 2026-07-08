@@ -6,6 +6,7 @@ import { initCommand } from "./commands/init.js";
 import { modelsCommand } from "./commands/models.js";
 import { profilesCommand } from "./commands/profiles.js";
 import { agentsCommand } from "./commands/agents.js";
+import { skillsCommand } from "./commands/skills.js";
 import { uninstallCommand } from "./commands/uninstall.js";
 import {
   CancellationError,
@@ -19,7 +20,7 @@ const program = new Command();
 program
   .name("opencode-path")
   .description("Structured multi-agent workflow CLI for opencode")
-  .version("0.4.2");
+  .version("0.5.0");
 
 program
   .command("init")
@@ -44,6 +45,17 @@ program
   }));
 
 program
+  .command("skills")
+  .description("Manage optional workflow skills (install, remove)")
+  .option("--global", "Use global scope")
+  .option("--project", "Use project scope")
+  .option("--dry-run", "Show planned changes without applying them")
+  .option("-y, --yes", "Skip confirmation prompts")
+  .action(runWithExitCode(async (options) => {
+    await skillsCommand(options);
+  }));
+
+program
   .command("models")
   .description("Configure model IDs for active agents")
   .option("--global", "Use global scope")
@@ -65,26 +77,13 @@ program
 
 program
   .command("uninstall")
-  .description("Remove managed custom agent files and core skills")
+  .description("Remove managed custom agent files and managed skills")
   .option("--global", "Use global scope")
   .option("--project", "Use project scope")
   .option("-y, --yes", "Skip confirmation prompts")
   .action(runWithExitCode(async (options) => {
     await uninstallCommand(options);
   }));
-
-// ---------------------------------------------------------------------------
-// Technical debt (AC-10): Future CLI commands
-// ---------------------------------------------------------------------------
-// When optional skills are introduced, consider adding:
-// - `skills` command: list, install, update, delete optional skills
-//   (register in src/commands/skills.ts, add to the program below uninstall)
-// - `--update` flag on `init` to refresh managed agent/skill files to
-//   latest packaged versions without re-running the full guided flow
-// - Update/refresh semantics in src/lib/skills.ts for managed skill files
-// Core skill installation (auto-installed during init) and uninstall
-// already handle managed skills; the dedicated `skills` command would
-// handle optional/user-selected skills and independent update flows.
 
 setupGlobalSigintHandler();
 
