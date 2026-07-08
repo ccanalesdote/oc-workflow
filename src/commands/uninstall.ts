@@ -11,9 +11,9 @@ import {
 } from "../lib/agents.js";
 import {
   fileHasSkillMarker,
-  deleteCoreSkill,
+  deleteManagedSkill,
 } from "../lib/skills.js";
-import { CORE_SKILLS, type CoreSkillName } from "../lib/paths.js";
+import { isManagedSkill, type ManagedSkillName } from "../lib/paths.js";
 import {
   printHeader,
   printPaths,
@@ -86,16 +86,29 @@ function computeUninstallPlan(target: InstallTarget): UninstallPlan {
     }
   }
 
-  // Scan the skills directory for managed core skills
+  // Scan the skills directory for all SKILL.md files.
+  // Managed files (with marker, in the managed catalog) are deleted.
+  // Unmarked files OR files in unknown directories are preserved and reported.
   if (existsSync(target.skillDir)) {
-    for (const skillName of CORE_SKILLS) {
+    let skillDirs: string[];
+    try {
+      skillDirs = readdirSync(target.skillDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory())
+        .map((d) => d.name);
+    } catch {
+      skillDirs = [];
+    }
+
+    for (const skillName of skillDirs) {
       const skillFile = join(target.skillDir, skillName, "SKILL.md");
-      if (existsSync(skillFile)) {
-        if (fileHasSkillMarker(skillFile)) {
-          skillsToDelete.push(skillName);
-        } else {
-          skillsToSkip.push(skillName);
-        }
+      if (!existsSync(skillFile)) continue;
+
+      // Only delete skills that are in the managed catalog AND have the marker.
+      // Unknown directories or unmarked files are preserved.
+      if (isManagedSkill(skillName) && fileHasSkillMarker(skillFile)) {
+        skillsToDelete.push(skillName);
+      } else {
+        skillsToSkip.push(skillName);
       }
     }
   }
@@ -165,7 +178,7 @@ function buildUninstallSummary(
     }
     if (plan.skillsToSkip.length > 0) {
       lines.push({
-        label: "Skip skills (unmarked):",
+        label: "Skip skills:",
         value: plan.skillsToSkip.join(", "),
         color: "dim",
       });
@@ -200,9 +213,9 @@ function applyUninstallPlan(
     }
   }
 
-  // Delete managed core skill files
+  // Delete managed skill files (core and optional)
   for (const skillName of plan.skillsToDelete) {
-    const wasDeleted = deleteCoreSkill(skillName as CoreSkillName, target);
+    const wasDeleted = deleteManagedSkill(skillName as ManagedSkillName, target);
     if (wasDeleted) {
       skillsDeleted.push(skillName);
     } else {
@@ -296,7 +309,7 @@ export async function uninstallCommand(
 
   if (result.skillsSkipped.length > 0) {
     printWarning(
-      `Unmarked skill files were not deleted: ${result.skillsSkipped.join(", ")}`
+      `Unmarked or unmanaged skill files were not deleted: ${result.skillsSkipped.join(", ")}`
     );
   }
 

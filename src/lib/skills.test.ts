@@ -11,13 +11,16 @@ import {
   addSkillMarker,
   MANAGED_SKILL_MARKER,
   listManagedSkillCatalog,
+  listCoreSkillCatalog,
+  listOptionalSkillCatalog,
   getSkillInstallPath,
   getSkillState,
   listManagedSkillStatuses,
   listActiveManagedSkills,
+  installManagedSkill,
   installCoreSkill,
-  updateCoreSkill,
-  deleteCoreSkill,
+  updateManagedSkill,
+  deleteManagedSkill,
 } from "./skills.js";
 import { parseFrontmatter } from "./frontmatter.js";
 import {
@@ -28,7 +31,7 @@ import {
   existsSync,
 } from "node:fs";
 import { join } from "node:path";
-import { resolveTarget, CORE_SKILLS, type InstallTarget, type CoreSkillName } from "./paths.js";
+import { resolveTarget, CORE_SKILLS, OPTIONAL_SKILLS, ALL_MANAGED_SKILLS, type InstallTarget, type CoreSkillName, type ManagedSkillName } from "./paths.js";
 
 const FIXTURE_DIR = join(import.meta.dirname, "__fixtures__", "skills");
 
@@ -103,14 +106,20 @@ describe("readSkillTemplate", () => {
 });
 
 describe("listSkillTemplates", () => {
-  it("lists cross-repo-architecture", () => {
+  it("lists all managed skill templates (core + optional)", () => {
     const skills = listSkillTemplates();
     expect(skills).toContain("cross-repo-architecture");
+    expect(skills).toContain("migration-and-data-change");
+    expect(skills).toContain("api-contracts");
+    expect(skills).toContain("security-boundary-review");
+    expect(skills).toContain("incident-recovery");
+    expect(skills).toContain("test-strategy");
+    expect(skills.length).toBe(ALL_MANAGED_SKILLS.length);
   });
 });
 
 describe("validateAllSkillTemplates", () => {
-  it("returns empty array when all skills are valid", () => {
+  it("returns empty array when all managed templates are valid", () => {
     const errors = validateAllSkillTemplates();
     expect(errors).toEqual([]);
   });
@@ -157,7 +166,7 @@ describe("skill template frontmatter", () => {
     expect(body).toContain(MANAGED_SKILL_MARKER);
   });
 
-  it("updateCoreSkill preserves frontmatter through update cycle (AC-02)", () => {
+  it("updateManagedSkill preserves frontmatter through update cycle (AC-02)", () => {
     const target = fixtureTarget();
     installCoreSkill("cross-repo-architecture", target);
 
@@ -175,7 +184,7 @@ ${MANAGED_SKILL_MARKER}
       "utf-8"
     );
 
-    const result = updateCoreSkill("cross-repo-architecture", target);
+    const result = updateManagedSkill("cross-repo-architecture", target);
     expect(result).toBe("updated");
 
     const content = readFileSync(filePath, "utf-8");
@@ -191,6 +200,46 @@ ${MANAGED_SKILL_MARKER}
     expect(body).toContain("# Cross-Repo Architecture");
     expect(body).toContain(MANAGED_SKILL_MARKER);
   });
+});
+
+// ---------------------------------------------------------------------------
+// Optional skill template frontmatter validation (AC-11)
+// ---------------------------------------------------------------------------
+
+describe("optional skill template frontmatter", () => {
+  const optionalSkills = OPTIONAL_SKILLS as readonly string[];
+
+  for (const skillName of optionalSkills) {
+    it(`${skillName} SKILL.md has valid frontmatter with matching name`, () => {
+      const content = readSkillTemplate(skillName as ManagedSkillName);
+      const { frontmatter, body } = parseFrontmatter(content);
+
+      expect(frontmatter).toBeDefined();
+      expect(frontmatter.name).toBe(skillName);
+
+      const desc = frontmatter.description;
+      expect(typeof desc).toBe("string");
+      expect((desc as string).length).toBeGreaterThan(0);
+
+      // Body contains managed marker
+      expect(body).toContain(MANAGED_SKILL_MARKER);
+    });
+
+    it(`${skillName} can be installed with managed marker`, () => {
+      const target = fixtureTarget();
+      const result = installManagedSkill(skillName as ManagedSkillName, target);
+      expect(result).toBe("created");
+
+      const filePath = getSkillInstallPath(skillName as ManagedSkillName, target);
+      const content = readFileSync(filePath, "utf-8");
+
+      const { frontmatter, body } = parseFrontmatter(content);
+      expect(frontmatter.name).toBe(skillName);
+      expect(typeof frontmatter.description).toBe("string");
+      expect((frontmatter.description as string).length).toBeGreaterThan(0);
+      expect(body).toContain(MANAGED_SKILL_MARKER);
+    });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -246,10 +295,44 @@ describe("addSkillMarker", () => {
 // ---------------------------------------------------------------------------
 
 describe("listManagedSkillCatalog", () => {
-  it("includes cross-repo-architecture", () => {
+  it("includes cross-repo-architecture and optional skills", () => {
     const catalog = listManagedSkillCatalog();
     expect(catalog).toContain("cross-repo-architecture");
-    expect(catalog.length).toBe(CORE_SKILLS.length);
+    expect(catalog).toContain("migration-and-data-change");
+    expect(catalog).toContain("api-contracts");
+    expect(catalog).toContain("security-boundary-review");
+    expect(catalog).toContain("incident-recovery");
+    expect(catalog).toContain("test-strategy");
+    expect(catalog.length).toBe(ALL_MANAGED_SKILLS.length);
+  });
+
+  it("distinguishes core vs optional in ManagedSkillStatus kind field", () => {
+    const target = fixtureTarget();
+    const statuses = listManagedSkillStatuses(target);
+    const coreStatus = statuses.find((s) => s.name === "cross-repo-architecture");
+    expect(coreStatus).toBeDefined();
+    expect(coreStatus!.kind).toBe("core");
+    const optionalStatus = statuses.find((s) => s.name === "migration-and-data-change");
+    expect(optionalStatus).toBeDefined();
+    expect(optionalStatus!.kind).toBe("optional");
+  });
+});
+
+describe("listCoreSkillCatalog", () => {
+  it("returns only core skills", () => {
+    const catalog = listCoreSkillCatalog();
+    expect(catalog).toEqual([...CORE_SKILLS]);
+    expect(catalog).toContain("cross-repo-architecture");
+    expect(catalog).not.toContain("migration-and-data-change");
+  });
+});
+
+describe("listOptionalSkillCatalog", () => {
+  it("returns only optional skills", () => {
+    const catalog = listOptionalSkillCatalog();
+    expect(catalog).toEqual([...OPTIONAL_SKILLS]);
+    expect(catalog).toContain("migration-and-data-change");
+    expect(catalog).not.toContain("cross-repo-architecture");
   });
 });
 
@@ -293,10 +376,10 @@ describe("getSkillState", () => {
 });
 
 describe("listManagedSkillStatuses", () => {
-  it("returns statuses for all core skills", () => {
+  it("returns statuses for all managed skills", () => {
     const target = fixtureTarget();
     const statuses = listManagedSkillStatuses(target);
-    expect(statuses.length).toBe(CORE_SKILLS.length);
+    expect(statuses.length).toBe(ALL_MANAGED_SKILLS.length);
     expect(statuses.every((s) => ["active", "missing", "conflict"].includes(s.state))).toBe(true);
   });
 });
@@ -371,7 +454,7 @@ describe("installCoreSkill", () => {
   });
 });
 
-describe("updateCoreSkill", () => {
+describe("updateManagedSkill", () => {
   it("updates a managed skill file", () => {
     const target = fixtureTarget();
     installCoreSkill("cross-repo-architecture", target);
@@ -379,7 +462,7 @@ describe("updateCoreSkill", () => {
     const filePath = getSkillInstallPath("cross-repo-architecture", target);
     writeFileSync(filePath, `# Old content\n${MANAGED_SKILL_MARKER}\n`, "utf-8");
     
-    const result = updateCoreSkill("cross-repo-architecture", target);
+    const result = updateManagedSkill("cross-repo-architecture", target);
     expect(result).toBe("updated");
     const content = readFileSync(filePath, "utf-8");
     expect(content).toContain("Cross-Repo Architecture");
@@ -392,7 +475,7 @@ describe("updateCoreSkill", () => {
     mkdirSync(join(filePath, ".."), { recursive: true });
     writeFileSync(filePath, "# Manual\n", "utf-8");
     
-    const result = updateCoreSkill("cross-repo-architecture", target);
+    const result = updateManagedSkill("cross-repo-architecture", target);
     expect(result).toBe("not_managed");
     // File should be untouched
     expect(readFileSync(filePath, "utf-8")).toBe("# Manual\n");
@@ -400,26 +483,26 @@ describe("updateCoreSkill", () => {
 
   it("returns 'not_installed' when file does not exist", () => {
     const target = fixtureTarget();
-    const result = updateCoreSkill("cross-repo-architecture", target);
+    const result = updateManagedSkill("cross-repo-architecture", target);
     expect(result).toBe("not_installed");
   });
 });
 
-describe("deleteCoreSkill", () => {
+describe("deleteManagedSkill", () => {
   it("deletes a managed skill file", () => {
     const target = fixtureTarget();
     installCoreSkill("cross-repo-architecture", target);
     const filePath = getSkillInstallPath("cross-repo-architecture", target);
     expect(existsSync(filePath)).toBe(true);
     
-    const result = deleteCoreSkill("cross-repo-architecture", target);
+    const result = deleteManagedSkill("cross-repo-architecture", target);
     expect(result).toBe(true);
     expect(existsSync(filePath)).toBe(false);
   });
 
   it("returns false for non-existent file", () => {
     const target = fixtureTarget();
-    const result = deleteCoreSkill("cross-repo-architecture", target);
+    const result = deleteManagedSkill("cross-repo-architecture", target);
     expect(result).toBe(false);
   });
 
@@ -429,7 +512,7 @@ describe("deleteCoreSkill", () => {
     mkdirSync(join(filePath, ".."), { recursive: true });
     writeFileSync(filePath, "# Manual\n", "utf-8");
     
-    const result = deleteCoreSkill("cross-repo-architecture", target);
+    const result = deleteManagedSkill("cross-repo-architecture", target);
     expect(result).toBe(false);
     expect(existsSync(filePath)).toBe(true);
   });
@@ -440,7 +523,7 @@ describe("deleteCoreSkill", () => {
     const skillDir = join(target.skillDir, "cross-repo-architecture");
     expect(existsSync(skillDir)).toBe(true);
     
-    deleteCoreSkill("cross-repo-architecture", target);
+    deleteManagedSkill("cross-repo-architecture", target);
     expect(existsSync(skillDir)).toBe(false);
   });
 });
@@ -450,16 +533,18 @@ describe("deleteCoreSkill", () => {
 // ---------------------------------------------------------------------------
 
 describe("edge cases", () => {
-  it("project target without init has missing skills", () => {
+  it("project target without init has missing core skills", () => {
     const target = fixtureTarget();
     const statuses = listManagedSkillStatuses(target);
-    expect(statuses.every((s) => s.state === "missing")).toBe(true);
+    const coreStatuses = statuses.filter((s) => s.kind === "core");
+    expect(coreStatuses.every((s) => s.state === "missing")).toBe(true);
   });
 
-  it("global target without init has missing skills", () => {
+  it("global target without init has missing core skills", () => {
     const target = fixtureTarget("global");
     const statuses = listManagedSkillStatuses(target);
-    expect(statuses.every((s) => s.state === "missing")).toBe(true);
+    const coreStatuses = statuses.filter((s) => s.kind === "core");
+    expect(coreStatuses.every((s) => s.state === "missing")).toBe(true);
   });
 
   it("already_active does not modify file content", () => {

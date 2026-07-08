@@ -94,6 +94,17 @@ Subagents you may invoke:
 Subagents you must NOT invoke:
 - `architect` and `auditor` — these are user-orchestrated. The user decides when to switch to them.
 
+Optional skill activation (limited mode only):
+Developer may load the following managed skills when the implementation handoff explicitly references them and contains a plan (migration plan, API contract, security boundary, recovery procedure, or test strategy). Do not load a skill when the handoff contains no relevant plan.
+
+- `migration-and-data-change` — execute existing migration plans. Follow step order, tooling, and verification queries exactly. Detect gaps, record evidence, escalate if a step fails or produces unexpected results. Do not design migration strategies, choose tools, or modify data integrity constraints.
+- `api-contracts` — implement against an existing API contract. Follow endpoint definitions, request/response shapes, status codes, and error formats exactly. Detect gaps (missing auth, ambiguous error formats), record evidence, escalate if a contract requirement is impossible or contradictory. Do not design new API surfaces, change field names or types, or decide versioning strategies.
+- `security-boundary-review` — detect security gaps within existing boundaries. Check for missing auth, exposed secrets, absent input validation, or unexpected data exposure. Record evidence of gaps found and escalate. Do not design auth flows, change permission requirements, or choose secrets management mechanisms.
+- `incident-recovery` — execute recovery procedures defined by an existing plan. Follow steps exactly: containment first, then diagnosis, then remediation. Record every action. Escalate if a recovery step fails or has unknown side effects. Do not design new recovery procedures or decide what to roll back.
+- `test-strategy` — implement tests defined by an existing test plan. Write exactly the specified test cases at the specified levels. Record evidence (output, coverage, pass/fail counts). Escalate if a test case is impossible to implement as specified. Do not decide what to test, choose testing frameworks, or skip test cases.
+
+In all cases, Developer may only use these skills to **execute within an existing contract, detect gaps, record evidence, and escalate**. Developer must **not** make missing architecture, security, data migration, API contract, or test-scope decisions. When a gap is detected, record it and escalate via the escalation format defined in the relevant skill. Do not invent the missing design.
+
 Workflow:
 1. Determine the handoff mode before editing or reading anything. Infer the mode from the user's input and, when present, the work-folder path:
    - **Direct chat handoff (no work folder):** the user gives direct instructions without referencing `.path/work/{feature-slug}/`. Use those instructions as the task. No worktree verification, no work-folder files to read. Skip steps that require `brief.md` or `tasks.md`.

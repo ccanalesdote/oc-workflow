@@ -54,6 +54,8 @@ const SKIP_PROFILES_VALUE = "__skip_profiles__";
 const SKIP_MODELS_VALUE = "__skip_models__";
 const SKIP_ONE_MODEL_VALUE = "__skip_one_model__";
 
+const SKIP_OPTIONAL_SKILLS_VALUE = "__skip_optional_skills__";
+
 /**
  * Build a project fixture at the current cwd with a fresh .opencode/agent
  * directory and a minimal opencode.json.
@@ -154,6 +156,13 @@ describe("initCommand", () => {
   }
 
   /**
+   * Helper: mock the optional skills step to skip entirely.
+   */
+  function mockOptionalSkillsSkip() {
+    vi.mocked(select).mockResolvedValueOnce(SKIP_OPTIONAL_SKILLS_VALUE as any);
+  }
+
+  /**
    * Helper: mock the model step to configure models for the given number
    * of active agents. Returns the model assigned to each agent.
    *
@@ -225,6 +234,8 @@ describe("initCommand", () => {
 
     // Agent step: skip
     vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
+    // Optional skills step: skip
+    mockOptionalSkillsSkip();
     // Profile step: skip (patchable agents are active)
     vi.mocked(select).mockResolvedValueOnce(SKIP_PROFILES_VALUE as any);
     // Model step: skip
@@ -248,6 +259,8 @@ describe("initCommand", () => {
     // Agent step: select "select agents" then pick developer
     vi.mocked(select).mockResolvedValueOnce("__select__" as any);
     vi.mocked(checkbox).mockResolvedValueOnce(["developer"]);
+    // Optional skills step: skip
+    mockOptionalSkillsSkip();
     // Profile step: developer will be active after install, so patchable → skip
     vi.mocked(select).mockResolvedValueOnce(SKIP_PROFILES_VALUE as any);
     // Model step: 3 built-in agents active (plan, build, explore)
@@ -309,6 +322,8 @@ describe("initCommand", () => {
     // Agent step: select agents, pick developer
     vi.mocked(select).mockResolvedValueOnce("__select__" as any);
     vi.mocked(checkbox).mockResolvedValueOnce(["developer"]);
+    // Optional skills step: skip
+    mockOptionalSkillsSkip();
     // Profile step: select profiles, pick javascript-typescript
     // (developer will be active after install, so patchable includes it)
     vi.mocked(select).mockResolvedValueOnce("__select__" as any);
@@ -350,6 +365,8 @@ describe("initCommand", () => {
     // Agent step: select agents, pick developer
     vi.mocked(select).mockResolvedValueOnce("__select__" as any);
     vi.mocked(checkbox).mockResolvedValueOnce(["developer"]);
+    // Optional skills step: skip
+    mockOptionalSkillsSkip();
     // Profile step: developer will be active, so patchable → skip
     vi.mocked(select).mockResolvedValueOnce(SKIP_PROFILES_VALUE as any);
     // Model step: skip
@@ -400,6 +417,8 @@ describe("initCommand", () => {
       "build",
       "explore",
     ]);
+    // Optional skills step: skip
+    mockOptionalSkillsSkip();
     // Profile step: patchable agents (developer, reviewer, auditor) are active → skip
     vi.mocked(select).mockResolvedValueOnce(SKIP_PROFILES_VALUE as any);
     // Model step: skip
@@ -494,6 +513,8 @@ describe("initCommand", () => {
     // Agent step: select agents, pick developer
     vi.mocked(select).mockResolvedValueOnce("__select__" as any);
     vi.mocked(checkbox).mockResolvedValueOnce(["developer"]);
+    // Optional skills step: skip
+    mockOptionalSkillsSkip();
     // Profile step: skip
     vi.mocked(select).mockResolvedValueOnce(SKIP_PROFILES_VALUE as any);
     // Model step: skip
@@ -536,6 +557,8 @@ describe("initCommand", () => {
       "spec", "architect", "research",
       "plan", "build", "explore",
     ]);
+    // Optional skills step: skip
+    mockOptionalSkillsSkip();
     // Profile step: select javascript-typescript
     vi.mocked(select).mockResolvedValueOnce("__select__" as any);
     vi.mocked(checkbox).mockResolvedValueOnce(["javascript-typescript"]);
@@ -568,6 +591,8 @@ describe("initCommand", () => {
     // Agent step: select agents, pick developer
     vi.mocked(select).mockResolvedValueOnce("__select__" as any);
     vi.mocked(checkbox).mockResolvedValueOnce(["developer"]);
+    // Optional skills step: skip
+    mockOptionalSkillsSkip();
     // Profile step: skip
     vi.mocked(select).mockResolvedValueOnce(SKIP_PROFILES_VALUE as any);
     // Model step: configure, then for each of 4 agents (plan, build, explore, developer)
@@ -601,6 +626,8 @@ describe("initCommand", () => {
     // Agent step: select agents, pick developer
     vi.mocked(select).mockResolvedValueOnce("__select__" as any);
     vi.mocked(checkbox).mockResolvedValueOnce(["developer"]);
+    // Optional skills step: skip
+    mockOptionalSkillsSkip();
     // Profile step: skip
     vi.mocked(select).mockResolvedValueOnce(SKIP_PROFILES_VALUE as any);
     // Model step: configure, pick custom model for first agent
@@ -628,6 +655,8 @@ describe("initCommand", () => {
     // Agent step: select agents, pick developer
     vi.mocked(select).mockResolvedValueOnce("__select__" as any);
     vi.mocked(checkbox).mockResolvedValueOnce(["developer"]);
+    // Optional skills step: skip
+    mockOptionalSkillsSkip();
     // Profile step: skip
     vi.mocked(select).mockResolvedValueOnce(SKIP_PROFILES_VALUE as any);
     // Model step: configure, pick custom model for first agent
@@ -653,6 +682,8 @@ describe("initCommand", () => {
     // Agent step: select agents, pick developer
     vi.mocked(select).mockResolvedValueOnce("__select__" as any);
     vi.mocked(checkbox).mockResolvedValueOnce(["developer"]);
+    // Optional skills step: skip
+    mockOptionalSkillsSkip();
     // Profile step: skip
     vi.mocked(select).mockResolvedValueOnce(SKIP_PROFILES_VALUE as any);
     // Model step: configure, pick custom model for first agent
@@ -681,6 +712,8 @@ describe("initCommand", () => {
     // Full flow: install developer, apply profile, configure models.
     vi.mocked(select).mockResolvedValueOnce("__select__" as any);
     vi.mocked(checkbox).mockResolvedValueOnce(["developer"]);
+    // Optional skills step: skip
+    mockOptionalSkillsSkip();
     vi.mocked(select).mockResolvedValueOnce("__select__" as any);
     vi.mocked(checkbox).mockResolvedValueOnce(["javascript-typescript"]);
     // Built-ins (plan, build, explore) + developer = 4 active model agents
@@ -739,6 +772,8 @@ describe("initCommand", () => {
     // Agent step: select agents, pick developer
     vi.mocked(select).mockResolvedValueOnce("__select__" as any);
     vi.mocked(checkbox).mockResolvedValueOnce(["developer"]);
+    // Optional skills step: skip
+    mockOptionalSkillsSkip();
     // Profile step: skip
     vi.mocked(select).mockResolvedValueOnce(SKIP_PROFILES_VALUE as any);
     // Model step: skip
@@ -777,6 +812,8 @@ describe("initCommand", () => {
 
     // Agent step: skip
     vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
+    // Optional skills step: skip
+    mockOptionalSkillsSkip();
     // Profile step: no patchable custom agents active, auto-skipped
     // Model step: skip
     mockModelsSkip();
@@ -800,6 +837,8 @@ describe("initCommand", () => {
 
     // Agent step: skip
     vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
+    // Optional skills step: skip
+    mockOptionalSkillsSkip();
     // Profile step: no patchable custom agents active, auto-skipped
     // Model step: skip
     mockModelsSkip();
@@ -833,7 +872,9 @@ describe("initCommand", () => {
 
     // Agent step: skip
     vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
-    // Profile step: no patchable agents, auto-skipped
+    // Optional skills step: skip
+    mockOptionalSkillsSkip();
+    // Profile step: no patchable custom agents active, auto-skipped
     // Model step: skip
     mockModelsSkip();
 
@@ -854,6 +895,132 @@ describe("initCommand", () => {
     const content = readFileSync(join(skillDir, "SKILL.md"), "utf-8");
     expect(content).toBe("# Manual skill\n");
     expect(content).not.toContain("<!-- managed-by: opencode-path -->");
+
+    logSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Optional skill init tests (AC-03, AC-04)
+  // ---------------------------------------------------------------------------
+
+  it("--yes does not install optional skills automatically", async () => {
+    const root = chdirToFixture();
+
+    // Agent step: skip
+    vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
+    // Profile step: no patchable agents, auto-skipped
+    // Model step: skip
+    mockModelsSkip();
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await initCommand({ project: true, yes: true });
+
+    // Optional skills should NOT be installed (--yes skips the step)
+    const optSkillPath = join(
+      root, ".opencode", "skills", "migration-and-data-change", "SKILL.md"
+    );
+    expect(existsSync(optSkillPath)).toBe(false);
+
+    // But core skill should still be installed
+    const coreSkillPath = join(
+      root, ".opencode", "skills", "cross-repo-architecture", "SKILL.md"
+    );
+    expect(existsSync(coreSkillPath)).toBe(true);
+
+    logSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  it("init does not remove optional skills when unchecked", async () => {
+    const root = chdirToFixture({
+      activeSkills: ["cross-repo-architecture", "migration-and-data-change"],
+    });
+
+    // Agent step: skip
+    vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
+    // Optional skills step: select, then uncheck if any checked
+    vi.mocked(select).mockResolvedValueOnce("__select__" as any);
+    vi.mocked(checkbox).mockResolvedValueOnce([]); // leave all unchecked
+    // Profile step: no patchable, auto-skipped
+    // Model step: skip
+    mockModelsSkip();
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await initCommand({ project: true });
+
+    // migration-and-data-change should STILL exist (init is add-only)
+    const optSkillPath = join(
+      root, ".opencode", "skills", "migration-and-data-change", "SKILL.md"
+    );
+    expect(existsSync(optSkillPath)).toBe(true);
+
+    logSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  it("init installs selected optional skills", async () => {
+    const root = chdirToFixture();
+
+    // Agent step: skip
+    vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
+    // Optional skills step: select, check migration-and-data-change
+    vi.mocked(select).mockResolvedValueOnce("__select__" as any);
+    vi.mocked(checkbox).mockResolvedValueOnce(["migration-and-data-change"]);
+    // Profile step: no patchable, auto-skipped
+    // Model step: skip
+    mockModelsSkip();
+    // Final confirm: yes
+    vi.mocked(select).mockResolvedValueOnce("yes" as any);
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await initCommand({ project: true });
+
+    // Optional skill was installed
+    const optSkillPath = join(
+      root, ".opencode", "skills", "migration-and-data-change", "SKILL.md"
+    );
+    expect(existsSync(optSkillPath)).toBe(true);
+    expect(readFileSync(optSkillPath, "utf-8")).toContain("<!-- managed-by: opencode-path -->");
+
+    logSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  it("init warns about conflicting optional skills and excludes them from selection", async () => {
+    const root = chdirToFixture();
+
+    // Create an unmanaged optional skill file
+    const skillDir = join(root, ".opencode", "skills", "migration-and-data-change");
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(join(skillDir, "SKILL.md"), "# Manual optional skill\n", "utf-8");
+
+    // Agent step: skip
+    vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
+    // Optional skills step: the conflicting one is excluded, but others are selectable
+    vi.mocked(select).mockResolvedValueOnce(SKIP_OPTIONAL_SKILLS_VALUE as any);
+    // Profile step: no patchable, auto-skipped
+    // Model step: skip
+    mockModelsSkip();
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await initCommand({ project: true });
+
+    const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    // Should warn about conflicting optional skill
+    expect(output).toContain("Conflicting optional skills");
+    expect(output).toContain("migration-and-data-change");
+
+    // Unmanaged file should not be overwritten
+    expect(readFileSync(join(skillDir, "SKILL.md"), "utf-8")).toBe("# Manual optional skill\n");
 
     logSpy.mockRestore();
     errorSpy.mockRestore();

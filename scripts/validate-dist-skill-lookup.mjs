@@ -52,25 +52,32 @@ if (!existsSync(skillTemplatesDir)) {
 }
 console.log("templates/skills/ exists ✓");
 
-// ── 4. Verify cross-repo-architecture/SKILL.md ─────────────────────────────
+// ── 4. Verify all managed skill templates ───────────────────────────────────
 
-const skillFile = resolve(skillTemplatesDir, "cross-repo-architecture", "SKILL.md");
-console.log(`Skill file: ${skillFile}`);
+const managedSkills = [
+  "cross-repo-architecture",
+  "migration-and-data-change",
+  "api-contracts",
+  "security-boundary-review",
+  "incident-recovery",
+  "test-strategy",
+];
 
-if (!existsSync(skillFile)) {
-  fail(`Skill template file not found at: ${skillFile}`);
+for (const skillName of managedSkills) {
+  const skillFile = resolve(skillTemplatesDir, skillName, "SKILL.md");
+  console.log(`Skill file: ${skillFile}`);
+
+  if (!existsSync(skillFile)) {
+    fail(`Skill template file not found at: ${skillFile}`);
+  }
+  console.log(`${skillName}/SKILL.md exists ✓`);
+
+  const content = readFileSync(skillFile, "utf-8");
+  if (!content.includes("<!-- managed-by: opencode-path -->")) {
+    fail(`${skillName}/SKILL.md is missing the managed marker`);
+  }
+  console.log(`${skillName} managed marker verified ✓`);
 }
-console.log("cross-repo-architecture/SKILL.md exists ✓");
-
-// ── 5. Verify file content ─────────────────────────────────────────────────
-
-const content = readFileSync(skillFile, "utf-8");
-if (!content.includes("Cross-Repo Architecture")) {
-  fail("Skill template content does not contain expected text 'Cross-Repo Architecture'");
-}
-console.log("Skill template content verified ✓");
-
-// ── 6. Also verify the agent templates path for completeness ───────────────
 
 const agentTemplatesDir = resolve(distDir, "..", "templates");
 if (!existsSync(agentTemplatesDir)) {

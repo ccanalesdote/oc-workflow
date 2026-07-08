@@ -60,6 +60,17 @@ When the feature being designed affects **multiple repositories, services, packa
 
 If you discover mid-design that the feature spans repos, switch to cross mode before finalizing the implementation handoff.
 
+## Optional skill activation
+
+Architect may load the following optional skills when the design warrants it. Do not inline each skill's full protocol here; load the skill to get its detailed rules.
+
+- `migration-and-data-change` — load when the feature involves database schema changes, data migrations, backfills, or any mutation of persisted data. Defines the migration safety protocol (planning, execution, rollback, verification).
+- `api-contracts` — load when the feature defines, changes, or consumes an API contract (REST, GraphQL, gRPC, events, webhooks). Defines the contract lifecycle (definition, compatibility, breaking-change detection, versioning).
+- `security-boundary-review` — load when the feature touches authentication, authorization, data exposure, input validation, or secrets management. Defines the security review protocol (threat surface, boundary enforcement, gap escalation).
+- `test-strategy` — load when the feature needs a test plan, coverage strategy, or verification approach. Defines test levels, case mapping to acceptance criteria, and evidence requirements.
+
+Architect does not directly invoke `incident-recovery`; that skill is for incident response and post-incident audit.
+
 ## Subagents you may invoke
 
 - `explore` — for codebase reconnaissance: understand current architecture, conventions, dependencies, and constraints before designing.
