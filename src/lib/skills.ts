@@ -191,8 +191,8 @@ export function addSkillMarker(content: string): string {
 // Catalog
 // ---------------------------------------------------------------------------
 
-/** Whether a managed skill is core or optional. */
-export type ManagedSkillKind = "core" | "optional";
+/** Whether a managed skill is core, optional, or graphify. */
+export type ManagedSkillKind = "core" | "optional" | "graphify";
 
 /** State of a managed skill at a given target. */
 export type SkillState = "active" | "missing" | "conflict";
@@ -256,7 +256,7 @@ export function listManagedSkillStatuses(target: InstallTarget): ManagedSkillSta
   return listManagedSkillCatalog().map((name) => ({
     name,
     state: getSkillState(name, target),
-    kind: isCoreSkill(name) ? "core" : "optional",
+    kind: isCoreSkill(name) ? "core" : isOptionalSkill(name) ? "optional" : "graphify",
   }));
 }
 

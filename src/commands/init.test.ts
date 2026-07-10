@@ -47,6 +47,18 @@ import { installCoreSkill } from "../lib/skills.js";
 import * as opencodeModels from "../lib/opencode-models.js";
 import { CUSTOM_MODEL_VALUE } from "../lib/opencode-models.js";
 import * as messages from "../lib/messages.js";
+import * as graphifyLib from "../lib/graphify.js";
+
+// Mock graphify module for all tests
+vi.mock("../lib/graphify.js", () => ({
+  isGraphifyAvailable: vi.fn().mockReturnValue(false),
+  isUvAvailable: vi.fn().mockReturnValue(true),
+  installGraphifyCli: vi.fn().mockResolvedValue({ success: true }),
+  installGraphifyOpenCodeSkill: vi.fn().mockResolvedValue({ success: true }),
+  hasGraph: vi.fn().mockReturnValue(false),
+  runGraphInit: vi.fn().mockResolvedValue({ success: true }),
+  runGraphUpdate: vi.fn().mockResolvedValue({ success: true }),
+}));
 
 const EXIT_PROMPT_ERROR = { name: "ExitPromptError" };
 const SKIP_AGENTS_VALUE = "__skip_agents__";
@@ -55,6 +67,22 @@ const SKIP_MODELS_VALUE = "__skip_models__";
 const SKIP_ONE_MODEL_VALUE = "__skip_one_model__";
 
 const SKIP_OPTIONAL_SKILLS_VALUE = "__skip_optional_skills__";
+
+/**
+ * Helper: mock the Graphify prompt to reject (default "no").
+ * The Graphify prompt is a uiConfirmWithCancel call that uses uiSelect
+ * with Yes/No options. Mocking "no" rejects Graphify.
+ */
+function mockGraphifyReject() {
+  vi.mocked(select).mockResolvedValueOnce("no" as any);
+}
+
+/**
+ * Helper: mock the Graphify prompt to accept.
+ */
+function mockGraphifyAccept() {
+  vi.mocked(select).mockResolvedValueOnce("yes" as any);
+}
 
 /**
  * Build a project fixture at the current cwd with a fresh .opencode/agent
@@ -236,6 +264,8 @@ describe("initCommand", () => {
     vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
     // Optional skills step: skip
     mockOptionalSkillsSkip();
+    // Graphify prompt: reject
+    mockGraphifyReject();
     // Profile step: skip (patchable agents are active)
     vi.mocked(select).mockResolvedValueOnce(SKIP_PROFILES_VALUE as any);
     // Model step: skip
@@ -261,6 +291,7 @@ describe("initCommand", () => {
     vi.mocked(checkbox).mockResolvedValueOnce(["developer"]);
     // Optional skills step: skip
     mockOptionalSkillsSkip();
+    // Graphify prompt: NOT shown in dry-run mode (--dry-run skips it)
     // Profile step: developer will be active after install, so patchable → skip
     vi.mocked(select).mockResolvedValueOnce(SKIP_PROFILES_VALUE as any);
     // Model step: 3 built-in agents active (plan, build, explore)
@@ -324,6 +355,8 @@ describe("initCommand", () => {
     vi.mocked(checkbox).mockResolvedValueOnce(["developer"]);
     // Optional skills step: skip
     mockOptionalSkillsSkip();
+    // Graphify prompt: reject
+    mockGraphifyReject();
     // Profile step: select profiles, pick javascript-typescript
     // (developer will be active after install, so patchable includes it)
     vi.mocked(select).mockResolvedValueOnce("__select__" as any);
@@ -367,6 +400,8 @@ describe("initCommand", () => {
     vi.mocked(checkbox).mockResolvedValueOnce(["developer"]);
     // Optional skills step: skip
     mockOptionalSkillsSkip();
+    // Graphify prompt: reject
+    mockGraphifyReject();
     // Profile step: developer will be active, so patchable → skip
     vi.mocked(select).mockResolvedValueOnce(SKIP_PROFILES_VALUE as any);
     // Model step: skip
@@ -419,6 +454,8 @@ describe("initCommand", () => {
     ]);
     // Optional skills step: skip
     mockOptionalSkillsSkip();
+    // Graphify prompt: reject
+    mockGraphifyReject();
     // Profile step: patchable agents (developer, reviewer, auditor) are active → skip
     vi.mocked(select).mockResolvedValueOnce(SKIP_PROFILES_VALUE as any);
     // Model step: skip
@@ -515,6 +552,8 @@ describe("initCommand", () => {
     vi.mocked(checkbox).mockResolvedValueOnce(["developer"]);
     // Optional skills step: skip
     mockOptionalSkillsSkip();
+    // Graphify prompt: reject
+    mockGraphifyReject();
     // Profile step: skip
     vi.mocked(select).mockResolvedValueOnce(SKIP_PROFILES_VALUE as any);
     // Model step: skip
@@ -559,6 +598,8 @@ describe("initCommand", () => {
     ]);
     // Optional skills step: skip
     mockOptionalSkillsSkip();
+    // Graphify prompt: reject
+    mockGraphifyReject();
     // Profile step: select javascript-typescript
     vi.mocked(select).mockResolvedValueOnce("__select__" as any);
     vi.mocked(checkbox).mockResolvedValueOnce(["javascript-typescript"]);
@@ -593,6 +634,8 @@ describe("initCommand", () => {
     vi.mocked(checkbox).mockResolvedValueOnce(["developer"]);
     // Optional skills step: skip
     mockOptionalSkillsSkip();
+    // Graphify prompt: reject
+    mockGraphifyReject();
     // Profile step: skip
     vi.mocked(select).mockResolvedValueOnce(SKIP_PROFILES_VALUE as any);
     // Model step: configure, then for each of 4 agents (plan, build, explore, developer)
@@ -628,6 +671,8 @@ describe("initCommand", () => {
     vi.mocked(checkbox).mockResolvedValueOnce(["developer"]);
     // Optional skills step: skip
     mockOptionalSkillsSkip();
+    // Graphify prompt: reject
+    mockGraphifyReject();
     // Profile step: skip
     vi.mocked(select).mockResolvedValueOnce(SKIP_PROFILES_VALUE as any);
     // Model step: configure, pick custom model for first agent
@@ -657,6 +702,8 @@ describe("initCommand", () => {
     vi.mocked(checkbox).mockResolvedValueOnce(["developer"]);
     // Optional skills step: skip
     mockOptionalSkillsSkip();
+    // Graphify prompt: reject
+    mockGraphifyReject();
     // Profile step: skip
     vi.mocked(select).mockResolvedValueOnce(SKIP_PROFILES_VALUE as any);
     // Model step: configure, pick custom model for first agent
@@ -684,6 +731,8 @@ describe("initCommand", () => {
     vi.mocked(checkbox).mockResolvedValueOnce(["developer"]);
     // Optional skills step: skip
     mockOptionalSkillsSkip();
+    // Graphify prompt: reject
+    mockGraphifyReject();
     // Profile step: skip
     vi.mocked(select).mockResolvedValueOnce(SKIP_PROFILES_VALUE as any);
     // Model step: configure, pick custom model for first agent
@@ -714,6 +763,8 @@ describe("initCommand", () => {
     vi.mocked(checkbox).mockResolvedValueOnce(["developer"]);
     // Optional skills step: skip
     mockOptionalSkillsSkip();
+    // Graphify prompt: reject
+    mockGraphifyReject();
     vi.mocked(select).mockResolvedValueOnce("__select__" as any);
     vi.mocked(checkbox).mockResolvedValueOnce(["javascript-typescript"]);
     // Built-ins (plan, build, explore) + developer = 4 active model agents
@@ -774,6 +825,8 @@ describe("initCommand", () => {
     vi.mocked(checkbox).mockResolvedValueOnce(["developer"]);
     // Optional skills step: skip
     mockOptionalSkillsSkip();
+    // Graphify prompt: reject
+    mockGraphifyReject();
     // Profile step: skip
     vi.mocked(select).mockResolvedValueOnce(SKIP_PROFILES_VALUE as any);
     // Model step: skip
@@ -971,6 +1024,8 @@ describe("initCommand", () => {
     // Optional skills step: select, check migration-and-data-change
     vi.mocked(select).mockResolvedValueOnce("__select__" as any);
     vi.mocked(checkbox).mockResolvedValueOnce(["migration-and-data-change"]);
+    // Graphify prompt: reject
+    mockGraphifyReject();
     // Profile step: no patchable, auto-skipped
     // Model step: skip
     mockModelsSkip();
@@ -1024,5 +1079,267 @@ describe("initCommand", () => {
 
     logSpy.mockRestore();
     errorSpy.mockRestore();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Graphify integration init tests
+  // ---------------------------------------------------------------------------
+
+  describe("Graphify integration in init", () => {
+    let logSpy: ReturnType<typeof vi.spyOn>;
+    let errorSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(async () => {
+      vi.clearAllMocks();
+      logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      stderrWriteSpy = (vi
+        .spyOn(process.stderr, "write")
+        .mockImplementation(() => true) as unknown) as ReturnType<typeof vi.spyOn>;
+      modelsSpy = (vi
+        .spyOn(opencodeModels, "listOpenCodeModelsAsync")
+        .mockResolvedValue([]) as unknown) as ReturnType<typeof vi.spyOn>;
+
+      // Reset graphify mocks to defaults
+      vi.mocked(graphifyLib.isGraphifyAvailable).mockReturnValue(false);
+      vi.mocked(graphifyLib.isUvAvailable).mockReturnValue(true);
+      vi.mocked(graphifyLib.installGraphifyCli).mockResolvedValue({ success: true });
+      vi.mocked(graphifyLib.installGraphifyOpenCodeSkill).mockResolvedValue({ success: true });
+    });
+
+    afterEach(() => {
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
+      stderrWriteSpy.mockRestore();
+      modelsSpy.mockRestore();
+      vi.restoreAllMocks();
+    });
+
+    it("Graphify rejected: no Graphify calls and no graphify-explorer installed", async () => {
+      const root = chdirToFixture();
+
+      // Agent step: skip
+      vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
+      // Optional skills step: skip
+      mockOptionalSkillsSkip();
+      // Graphify prompt: reject
+      mockGraphifyReject();
+      // Model step: skip
+      mockModelsSkip();
+
+      await initCommand({ project: true });
+
+      // No Graphify CLI calls should have been made
+      expect(graphifyLib.installGraphifyCli).not.toHaveBeenCalled();
+      expect(graphifyLib.installGraphifyOpenCodeSkill).not.toHaveBeenCalled();
+
+      // graphify-explorer skill should NOT be installed
+      const explorerPath = join(
+        root,
+        ".opencode",
+        "skills",
+        "graphify-explorer",
+        "SKILL.md"
+      );
+      expect(existsSync(explorerPath)).toBe(false);
+    });
+
+    it("--with-graphify accepts Graphify without prompting", async () => {
+      const root = chdirToFixture();
+
+      // Agent step: skip
+      vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
+      // Optional skills step: skip
+      mockOptionalSkillsSkip();
+      // Graphify prompt is NOT shown (--with-graphify)
+      // Profile step: no patchable agents active, auto-skipped
+      // Model step: skip
+      mockModelsSkip();
+      // Final confirm: yes
+      vi.mocked(select).mockResolvedValueOnce("yes" as any);
+
+      await initCommand({ project: true, withGraphify: true });
+
+      // Graphify CLI was installed (not already available)
+      expect(graphifyLib.installGraphifyCli).toHaveBeenCalled();
+      // Official OpenCode skill was installed
+      expect(graphifyLib.installGraphifyOpenCodeSkill).toHaveBeenCalledWith(
+        "project"
+      );
+      // graphify-explorer should be installed
+      const explorerPath = join(
+        root,
+        ".opencode",
+        "skills",
+        "graphify-explorer",
+        "SKILL.md"
+      );
+      expect(existsSync(explorerPath)).toBe(true);
+    });
+
+    it("--yes alone does NOT accept Graphify", async () => {
+      const root = chdirToFixture();
+
+      // Agent step: skip
+      vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
+      // Optional skills + Graphify prompts are skipped by --yes
+      // Model step: skip
+      mockModelsSkip();
+
+      await initCommand({ project: true, yes: true });
+
+      // Graphify prompt is NOT shown (--yes skips it), and not accepted
+      expect(graphifyLib.installGraphifyCli).not.toHaveBeenCalled();
+      expect(graphifyLib.installGraphifyOpenCodeSkill).not.toHaveBeenCalled();
+
+      const explorerPath = join(
+        root,
+        ".opencode",
+        "skills",
+        "graphify-explorer",
+        "SKILL.md"
+      );
+      expect(existsSync(explorerPath)).toBe(false);
+    });
+
+    it("accepted + CLI already present: skips CLI install, runs official skill", async () => {
+      const root = chdirToFixture();
+      vi.mocked(graphifyLib.isGraphifyAvailable).mockReturnValue(true);
+
+      // Agent step: skip
+      vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
+      // Optional skills step: skip
+      mockOptionalSkillsSkip();
+      // Graphify prompt NOT shown (--with-graphify)
+      // Profile step: no patchable agents active, auto-skipped
+      // Model step: skip
+      mockModelsSkip();
+      // Final confirm: yes
+      vi.mocked(select).mockResolvedValueOnce("yes" as any);
+
+      await initCommand({ project: true, withGraphify: true });
+
+      // CLI install should NOT be called (already available)
+      expect(graphifyLib.installGraphifyCli).not.toHaveBeenCalled();
+      // Official skill install should still run
+      expect(graphifyLib.installGraphifyOpenCodeSkill).toHaveBeenCalled();
+      // graphify-explorer should be installed
+      const explorerPath = join(
+        root,
+        ".opencode",
+        "skills",
+        "graphify-explorer",
+        "SKILL.md"
+      );
+      expect(existsSync(explorerPath)).toBe(true);
+    });
+
+    it("accepted + CLI install fails: main init continues, no graphify-explorer", async () => {
+      const root = chdirToFixture();
+      vi.mocked(graphifyLib.installGraphifyCli).mockResolvedValue({
+        success: false,
+        error: "uv not found",
+      });
+
+      // Agent step: skip
+      vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
+      // Optional skills step: skip
+      mockOptionalSkillsSkip();
+      // Graphify prompt NOT shown (--with-graphify)
+      // Model step: skip
+      mockModelsSkip();
+      // Final confirm: yes
+      vi.mocked(select).mockResolvedValueOnce("yes" as any);
+
+      await initCommand({ project: true, withGraphify: true });
+
+      // CLI install was attempted
+      expect(graphifyLib.installGraphifyCli).toHaveBeenCalled();
+      // Official skill install should NOT be called (CLI failed)
+      expect(graphifyLib.installGraphifyOpenCodeSkill).not.toHaveBeenCalled();
+      // graphify-explorer should NOT be installed
+      const explorerPath = join(
+        root,
+        ".opencode",
+        "skills",
+        "graphify-explorer",
+        "SKILL.md"
+      );
+      expect(existsSync(explorerPath)).toBe(false);
+
+      // Main init should still complete (core skill installed)
+      const coreSkillPath = join(
+        root,
+        ".opencode",
+        "skills",
+        "cross-repo-architecture",
+        "SKILL.md"
+      );
+      expect(existsSync(coreSkillPath)).toBe(true);
+    });
+
+    it("accepted + official skill install fails: no graphify-explorer", async () => {
+      const root = chdirToFixture();
+      vi.mocked(graphifyLib.installGraphifyOpenCodeSkill).mockResolvedValue({
+        success: false,
+        error: "install failed",
+      });
+
+      // Agent step: skip
+      vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
+      // Optional skills step: skip
+      mockOptionalSkillsSkip();
+      // Graphify prompt NOT shown (--with-graphify)
+      // Model step: skip
+      mockModelsSkip();
+      // Final confirm: yes
+      vi.mocked(select).mockResolvedValueOnce("yes" as any);
+
+      await initCommand({ project: true, withGraphify: true });
+
+      // CLI install succeeded
+      expect(graphifyLib.installGraphifyCli).toHaveBeenCalled();
+      // Official skill install was attempted but failed
+      expect(graphifyLib.installGraphifyOpenCodeSkill).toHaveBeenCalled();
+      // graphify-explorer should NOT be installed (gated on official skill success)
+      const explorerPath = join(
+        root,
+        ".opencode",
+        "skills",
+        "graphify-explorer",
+        "SKILL.md"
+      );
+      expect(existsSync(explorerPath)).toBe(false);
+    });
+
+    it("unmarked graphify-explorer conflict: prevents all Graphify steps", async () => {
+      const root = chdirToFixture();
+
+      // Create an unmanaged graphify-explorer skill file
+      const skillDir = join(root, ".opencode", "skills", "graphify-explorer");
+      mkdirSync(skillDir, { recursive: true });
+      writeFileSync(join(skillDir, "SKILL.md"), "# Manual\n", "utf-8");
+
+      // Agent step: skip
+      vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
+      // Optional skills step: skip
+      mockOptionalSkillsSkip();
+      // Graphify prompt NOT shown (--with-graphify)
+      // Model step: skip
+      mockModelsSkip();
+      // Final confirm: yes
+      vi.mocked(select).mockResolvedValueOnce("yes" as any);
+
+      await initCommand({ project: true, withGraphify: true });
+
+      // No Graphify external steps should have run
+      expect(graphifyLib.installGraphifyCli).not.toHaveBeenCalled();
+      expect(graphifyLib.installGraphifyOpenCodeSkill).not.toHaveBeenCalled();
+
+      // Unmanaged file should NOT be overwritten
+      const content = readFileSync(join(skillDir, "SKILL.md"), "utf-8");
+      expect(content).toBe("# Manual\n");
+      expect(content).not.toContain("<!-- managed-by: opencode-path -->");
+    });
   });
 });

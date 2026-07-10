@@ -8,6 +8,7 @@ import { profilesCommand } from "./commands/profiles.js";
 import { agentsCommand } from "./commands/agents.js";
 import { skillsCommand } from "./commands/skills.js";
 import { uninstallCommand } from "./commands/uninstall.js";
+import { graphifyCommand } from "./commands/graphify.js";
 import {
   CancellationError,
   UsageError,
@@ -20,7 +21,7 @@ const program = new Command();
 program
   .name("opencode-path")
   .description("Structured multi-agent workflow CLI for opencode")
-  .version("0.5.0");
+  .version("0.6.0");
 
 program
   .command("init")
@@ -29,6 +30,7 @@ program
   .option("--project", "Use project scope")
   .option("--dry-run", "Show planned changes without applying them")
   .option("-y, --yes", "Skip confirmation prompts")
+  .option("--with-graphify", "Accept optional Graphify integration without prompting")
   .action(runWithExitCode(async (options) => {
     await initCommand(options);
   }));
@@ -83,6 +85,14 @@ program
   .option("-y, --yes", "Skip confirmation prompts")
   .action(runWithExitCode(async (options) => {
     await uninstallCommand(options);
+  }));
+
+program
+  .command("graphify")
+  .description("Initialize or update the local Graphify repository graph")
+  .option("--force", "Force-update an existing graph")
+  .action(runWithExitCode(async (options) => {
+    await graphifyCommand(options);
   }));
 
 setupGlobalSigintHandler();

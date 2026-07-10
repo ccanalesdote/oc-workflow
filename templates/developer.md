@@ -233,16 +233,24 @@ The close/finish procedure is triggered **only** by explicit user intent such as
 
 2. **Check for changes** — run `git status` and `git diff`. If the working tree is clean (nothing to commit), report that there is nothing to commit and skip to recommending optional cleanup (dedicated-worktree mode only). Do not invent commits.
 
-3. **Commit in logical units** — if there are uncommitted changes, commit them in logical units, one commit per task or coherent change. Use commit messages that reference the task ID or AC where applicable. Do not discard changes silently; if changes are ambiguous, ask the user how to handle them.
+3. **Optional: Refresh Graphify before commits** — If `.path/graphify-state.json` exists in the current repo root, offer to run `opencode-path graphify` so the graph and state file can be included in the commit set for the finished feature. Use wording like: "Graphify state file found. Run `opencode-path graphify` to refresh the graph before committing? The updated graph/state will be included in the commit set." This suggestion is based only on state-file existence; do not pre-check whether the Graphify CLI is installed.
+   - **If the user declines:** proceed to the commit step normally. Skipping the refresh is valid.
+   - **If the user accepts:**
+     a. Run `opencode-path graphify` via bash.
+     b. If the command succeeds, re-run `git status` and `git diff` so the user can review graph changes (e.g. updated `graphify-out/` or `.path/graphify-state.json`) as part of the commit set. Note that `workingTreeDirty: true` in the state file is expected and valid when refresh runs against uncommitted feature changes.
+     c. If the command fails, report the failure clearly and ask: "Graphify refresh failed. Continue with commits without refreshed graph state?" If the user confirms, proceed to the commit step. If the user declines, stop the close procedure without committing.
+   - The graph refresh and its effects do **not** change any commit-permission or no-push rules described below.
 
-4. **Report commits** — list all commits created during this close procedure (hash and message).
+4. **Commit in logical units** — if there are uncommitted changes, commit them in logical units, one commit per task or coherent change. Use commit messages that reference the task ID or AC where applicable. Do not discard changes silently; if changes are ambiguous, ask the user how to handle them.
 
-5. **Recommend push** — provide the exact manual push command for the current branch:
+5. **Report commits** — list all commits created during this close procedure (hash and message).
+
+6. **Recommend push** — provide the exact manual push command for the current branch:
    - Dedicated-worktree mode: `git push -u origin feature/{slug}`.
    - Current-checkout / direct-chat mode: provide the push command appropriate to the current branch (e.g. `git push -u origin <current-branch>`), and note the user should adjust the remote name if it is not `origin`.
    **Never run `git push` yourself**, even if the user asks.
 
-6. **Recommend cleanup (dedicated-worktree mode only)** — only when the handoff used a dedicated worktree, provide exact commands for optional cleanup (worktree removal and branch deletion) but do not run them. Example:
+7. **Recommend cleanup (dedicated-worktree mode only)** — only when the handoff used a dedicated worktree, provide exact commands for optional cleanup (worktree removal and branch deletion) but do not run them. Example:
    ```
    git worktree remove ../{repo-name}-{slug}
    git branch -d feature/{slug}

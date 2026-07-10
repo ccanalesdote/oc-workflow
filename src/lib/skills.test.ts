@@ -31,7 +31,7 @@ import {
   existsSync,
 } from "node:fs";
 import { join } from "node:path";
-import { resolveTarget, CORE_SKILLS, OPTIONAL_SKILLS, ALL_MANAGED_SKILLS, type InstallTarget, type CoreSkillName, type ManagedSkillName } from "./paths.js";
+import { resolveTarget, CORE_SKILLS, OPTIONAL_SKILLS, GRAPHIFY_SKILLS, ALL_MANAGED_SKILLS, type InstallTarget, type CoreSkillName, type ManagedSkillName } from "./paths.js";
 
 const FIXTURE_DIR = join(import.meta.dirname, "__fixtures__", "skills");
 
@@ -106,7 +106,7 @@ describe("readSkillTemplate", () => {
 });
 
 describe("listSkillTemplates", () => {
-  it("lists all managed skill templates (core + optional)", () => {
+  it("lists all managed skill templates (core + optional + graphify)", () => {
     const skills = listSkillTemplates();
     expect(skills).toContain("cross-repo-architecture");
     expect(skills).toContain("migration-and-data-change");
@@ -114,6 +114,7 @@ describe("listSkillTemplates", () => {
     expect(skills).toContain("security-boundary-review");
     expect(skills).toContain("incident-recovery");
     expect(skills).toContain("test-strategy");
+    expect(skills).toContain("graphify-explorer");
     expect(skills.length).toBe(ALL_MANAGED_SKILLS.length);
   });
 });
@@ -295,7 +296,7 @@ describe("addSkillMarker", () => {
 // ---------------------------------------------------------------------------
 
 describe("listManagedSkillCatalog", () => {
-  it("includes cross-repo-architecture and optional skills", () => {
+  it("includes all managed skills (core + optional + graphify)", () => {
     const catalog = listManagedSkillCatalog();
     expect(catalog).toContain("cross-repo-architecture");
     expect(catalog).toContain("migration-and-data-change");
@@ -303,6 +304,7 @@ describe("listManagedSkillCatalog", () => {
     expect(catalog).toContain("security-boundary-review");
     expect(catalog).toContain("incident-recovery");
     expect(catalog).toContain("test-strategy");
+    expect(catalog).toContain("graphify-explorer");
     expect(catalog.length).toBe(ALL_MANAGED_SKILLS.length);
   });
 
@@ -315,6 +317,14 @@ describe("listManagedSkillCatalog", () => {
     const optionalStatus = statuses.find((s) => s.name === "migration-and-data-change");
     expect(optionalStatus).toBeDefined();
     expect(optionalStatus!.kind).toBe("optional");
+  });
+
+  it("classifies graphify-explorer with kind 'graphify'", () => {
+    const target = fixtureTarget();
+    const statuses = listManagedSkillStatuses(target);
+    const graphifyStatus = statuses.find((s) => s.name === "graphify-explorer");
+    expect(graphifyStatus).toBeDefined();
+    expect(graphifyStatus!.kind).toBe("graphify");
   });
 });
 

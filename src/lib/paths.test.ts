@@ -3,7 +3,15 @@ import {
   resolveTarget,
   detectDefaultScope,
   isPackAgent,
+  isCoreSkill,
+  isOptionalSkill,
+  isGraphifySkill,
+  isManagedSkill,
   PACK_AGENTS,
+  CORE_SKILLS,
+  OPTIONAL_SKILLS,
+  GRAPHIFY_SKILLS,
+  ALL_MANAGED_SKILLS,
 } from "./paths.js";
 import { resolve, join } from "node:path";
 import { homedir } from "node:os";
@@ -76,5 +84,63 @@ describe("PACK_AGENTS", () => {
       "auditor",
       "research",
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Graphify skill catalog wiring
+// ---------------------------------------------------------------------------
+
+describe("Graphify skill catalog", () => {
+  it("graphify-explorer is in ALL_MANAGED_SKILLS", () => {
+    expect(ALL_MANAGED_SKILLS).toContain("graphify-explorer");
+  });
+
+  it("graphify-explorer is NOT in CORE_SKILLS", () => {
+    expect(CORE_SKILLS).not.toContain("graphify-explorer");
+  });
+
+  it("graphify-explorer is NOT in OPTIONAL_SKILLS", () => {
+    expect(OPTIONAL_SKILLS).not.toContain("graphify-explorer");
+  });
+
+  it("graphify-explorer is in GRAPHIFY_SKILLS", () => {
+    expect(GRAPHIFY_SKILLS).toContain("graphify-explorer");
+  });
+
+  it("isGraphifySkill returns true for graphify-explorer", () => {
+    expect(isGraphifySkill("graphify-explorer")).toBe(true);
+  });
+
+  it("isGraphifySkill returns false for core skills", () => {
+    expect(isGraphifySkill("cross-repo-architecture")).toBe(false);
+  });
+
+  it("isGraphifySkill returns false for optional skills", () => {
+    expect(isGraphifySkill("migration-and-data-change")).toBe(false);
+  });
+
+  it("isManagedSkill returns true for graphify skills", () => {
+    expect(isManagedSkill("graphify-explorer")).toBe(true);
+  });
+
+  it("isManagedSkill returns true for core skills", () => {
+    expect(isManagedSkill("cross-repo-architecture")).toBe(true);
+  });
+
+  it("isManagedSkill returns true for optional skills", () => {
+    expect(isManagedSkill("migration-and-data-change")).toBe(true);
+  });
+
+  it("isManagedSkill returns false for unknown skills", () => {
+    expect(isManagedSkill("nonexistent-skill")).toBe(false);
+  });
+
+  it("isCoreSkill returns false for graphify-explorer", () => {
+    expect(isCoreSkill("graphify-explorer")).toBe(false);
+  });
+
+  it("isOptionalSkill returns false for graphify-explorer", () => {
+    expect(isOptionalSkill("graphify-explorer")).toBe(false);
   });
 });

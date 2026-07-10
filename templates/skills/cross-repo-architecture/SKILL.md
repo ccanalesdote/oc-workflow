@@ -162,6 +162,15 @@ When repo-local Architect escalates a contract conflict:
 - **Repo names differ from directory names**: Match by stated identity in the cross draft, not by filesystem guesswork.
 - **Multiple repos in the same monorepo**: Still produce separate `repos/{repo}.md` per service boundary. Don't assume they share a stack or commands just because they share a repo.
 
+## Graphify in cross-repo work
+
+Graphify graphs and `.path/graphify-state.json` freshness metadata are **per repository**. In cross-repo exploration:
+
+- Explorer may use each repo's graph/state independently as an optional navigation aid for understanding structure, dependencies, and likely impact areas within a single repo.
+- Do **not** combine graph output from multiple repos into a shared graph, a unified representation, or a cross-repo contract source.
+- Shared API surfaces, DTO shapes, event schemas, auth models, error formats, and rollout ordering must **still be verified from source files and explicit contracts** (see `## Shared contracts (binding)`), not inferred from Graphify output alone.
+- If a repo's graph is stale or missing, Explorer falls back to normal source exploration within that repo. Graph freshness does not block cross-repo architecture decisions.
+
 ## Do not introduce
 
 - Do not create a separate `cross-architect` agent. This skill is loaded by Architect.

@@ -61,6 +61,7 @@ const managedSkills = [
   "security-boundary-review",
   "incident-recovery",
   "test-strategy",
+  "graphify-explorer",
 ];
 
 for (const skillName of managedSkills) {

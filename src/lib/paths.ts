@@ -92,16 +92,30 @@ export const OPTIONAL_SKILLS = [
 export type OptionalSkillName = (typeof OPTIONAL_SKILLS)[number];
 
 /**
- * Union of all managed skill names (core + optional).
+ * List of Graphify-specific managed skill names.
+ * These skills are managed by opencode-path but are NOT user-selectable in the
+ * normal optional-skill picker. They are installed only as part of the Graphify
+ * integration flow and only after the official Graphify CLI and OpenCode skill
+ * install succeed.
  */
-export type ManagedSkillName = CoreSkillName | OptionalSkillName;
+export const GRAPHIFY_SKILLS = [
+  "graphify-explorer",
+] as const;
+
+export type GraphifySkillName = (typeof GRAPHIFY_SKILLS)[number];
 
 /**
- * All managed skill names (core + optional), in catalog order.
+ * Union of all managed skill names (core + optional + graphify).
+ */
+export type ManagedSkillName = CoreSkillName | OptionalSkillName | GraphifySkillName;
+
+/**
+ * All managed skill names (core + optional + graphify), in catalog order.
  */
 export const ALL_MANAGED_SKILLS: readonly ManagedSkillName[] = [
   ...CORE_SKILLS,
   ...OPTIONAL_SKILLS,
+  ...GRAPHIFY_SKILLS,
 ];
 
 /**
@@ -119,10 +133,17 @@ export function isOptionalSkill(name: string): name is OptionalSkillName {
 }
 
 /**
- * Check if a skill name is a managed skill (core or optional).
+ * Type guard: check if a skill name is a Graphify-specific skill.
+ */
+export function isGraphifySkill(name: string): name is GraphifySkillName {
+  return (GRAPHIFY_SKILLS as readonly string[]).includes(name);
+}
+
+/**
+ * Check if a skill name is a managed skill (core, optional, or graphify).
  */
 export function isManagedSkill(name: string): name is ManagedSkillName {
-  return isCoreSkill(name) || isOptionalSkill(name);
+  return isCoreSkill(name) || isOptionalSkill(name) || isGraphifySkill(name);
 }
 
 /**
