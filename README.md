@@ -136,7 +136,36 @@ opencode-path graphify [options]
 2. If `graphify-out/graph.json` does not exist, runs `graphify .` to initialize a new graph.
 3. If `graphify-out/graph.json` exists, runs `graphify update .` for an incremental update.
 4. With `--force` and an existing graph, runs `graphify update . --force`. With `--force` and no graph, initializes normally.
-5. Does **not** install hooks, create branches, create worktrees, or modify `.path/work`.
+5. After a successful init or update, attempts to write `.path/graphify-state.json` with freshness metadata: schema version, timestamp, Graphify version, compatible install range, Git commit, and working tree dirty status. If the state file cannot be written (e.g. filesystem error), a warning is printed but the graph refresh is still considered successful.
+6. Does **not** install hooks, create branches, create worktrees, or modify `.path/work`.
+
+**Graphify freshness state (`.path/graphify-state.json`):**
+
+After a successful `opencode-path graphify` run, a `.path/graphify-state.json` file is written as advisory metadata. The state file is valid JSON with the following fields:
+
+| Field | Description |
+|-------|-------------|
+| `schemaVersion` | Schema version (`1`) |
+| `updatedAt` | ISO 8601 timestamp of the refresh |
+| `graphifyVersion` | Parsed semantic version string (e.g. `"0.9.11"`) or `null` |
+| `graphifyVersionRaw` | Raw `graphify --version` output or `null` |
+| `graphifyCompatibleRange` | Compatible install range (currently `>=0.9.0,<0.10.0`) |
+| `commit` | `HEAD` commit hash at refresh time, or `null` when Git is unavailable |
+| `workingTreeDirty` | `true`/`false` when Git status is available, or `null` when unavailable |
+
+The state file is advisory — it helps Explorer judge graph freshness without automatically rebuilding the graph. It is written to `.path/graphify-state.json` relative to the repo root. Whether to track this file in Git (or ignore it) is left to your repo's policy.
+
+**Graphify installation and compatible version range:**
+
+- New Graphify CLI installs (via `init --with-graphify`) use `uv tool install graphifyy>=0.9.0,<0.10.0` — the compatible `0.9.x` release line.
+- Existing Graphify CLI installations are **not** automatically reinstalled, downgraded, or upgraded. If you already have Graphify installed through any method (`uv tool install`, `pip`, etc.), it will be used as-is.
+- Graphify is and remains **optional**. No agent workflow requires it.
+
+**Default behavior:**
+
+- Graphify hooks, background/watch refresh, and automatic graph rebuilds on Explorer use are **not** installed or enabled by default.
+- Explorer may use `.path/graphify-state.json` metadata as a freshness hint during medium/large reconnaissance, but it will not auto-refresh the graph.
+- When closing a feature, Developer may suggest running `opencode-path graphify` before commits if `.path/graphify-state.json` exists — skipping the refresh is always valid.
 
 ---
 

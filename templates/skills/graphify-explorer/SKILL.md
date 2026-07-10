@@ -42,9 +42,18 @@ For localized work, prefer the normal Explorer tools: file globbing, content sea
 
 ## Graph freshness
 
-- Do not rebuild or update the graph automatically for every task.
+The `.path/graphify-state.json` file is the primary freshness signal for graphs refreshed through `opencode-path graphify`. It is advisory metadata, not a guarantee that the graph is fully current.
+
+When `.path/graphify-state.json` is present, use its metadata to judge how recent the graph is:
+- `commit` may be the pre-commit HEAD when Developer refreshed before committing feature changes; the graph may represent a state that is newer or older than the working tree.
+- `workingTreeDirty: true` is expected and valid when a refresh ran against uncommitted feature changes (e.g., during Developer's close/finish procedure).
+- If the graph appears stale relative to the code you need to explore, do **not** run `opencode-path graphify` automatically at the start of reconnaissance by default. Instead, fall back to normal source-file exploration or ask the user whether they want to refresh the graph first.
+
+### Rules for freshness
+- Do not rebuild or update the graph automatically for every task or on Explorer use by default.
 - Do not update the graph for small, localized exploration.
 - If the task is medium or large and the graph may be stale, prefer asking the user to run `opencode-path graphify` or run it only when explicitly appropriate for the exploration task.
+- Verify Graphify conclusions in source files. If graph output conflicts with source code, trust the source code and report the mismatch.
 - Do not install Git hooks or automatic graph refresh mechanisms.
 
 ## Scope boundary
