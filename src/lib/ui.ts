@@ -59,6 +59,8 @@ export interface CommandOptions extends GlobalProjectOptions {
   dryRun?: boolean;
   /** Skip confirmation prompts. */
   yes?: boolean;
+  /** Accept Graphify integration without prompting. */
+  withGraphify?: boolean;
 }
 
 export interface ScopeContext {

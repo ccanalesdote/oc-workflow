@@ -38,8 +38,14 @@ import {
   installManagedSkill,
   listManagedSkillStatuses,
   validateAllSkillTemplates,
+  getSkillState,
   type ManagedSkillStatus,
 } from "../lib/skills.js";
+import {
+  isGraphifyAvailable,
+  installGraphifyCli,
+  installGraphifyOpenCodeSkill,
+} from "../lib/graphify.js";
 import {
   printHeader,
   printPaths,
@@ -104,6 +110,8 @@ interface InitPlan {
   target: InstallTarget;
   skillStatuses: ManagedSkillStatus[];
   selectedOptionalSkills: ManagedSkillStatus[];
+  graphifyAccepted: boolean;
+  graphifyConflict: boolean;
 }
 
 interface InitApplyResult {
@@ -131,6 +139,17 @@ interface InitApplyResult {
     installed: string[];
     unchanged: string[];
     conflicts: string[];
+  };
+  graphifyResult: {
+    cliInstalled: boolean;
+    cliAlreadyPresent: boolean;
+    officialSkillInstalled: boolean;
+    explorerSkillInstalled: boolean;
+    explorerSkillUnchanged: boolean;
+    skipped: boolean;
+    failed: boolean;
+    failedStep?: string;
+    failedHint?: string;
   };
 }
 
@@ -395,6 +414,29 @@ function buildConsolidatedSummary(
     });
   }
 
+  // Graphify integration
+  if (plan.graphifyAccepted) {
+    if (plan.graphifyConflict) {
+      lines.push({
+        label: "Graphify:",
+        value: "conflict — unmarked graphify-explorer file detected",
+        color: "red",
+      });
+    } else {
+      lines.push({
+        label: "Graphify:",
+        value: "will install CLI + skills",
+        color: "green",
+      });
+    }
+  } else {
+    lines.push({
+      label: "Graphify:",
+      value: "skipped",
+      color: "yellow",
+    });
+  }
+
   return lines;
 }
 
@@ -415,7 +457,8 @@ function hasPlannedChanges(plan: InitPlan): boolean {
     hasSkillChanges ||
     hasOptionalSkillChanges ||
     plan.selectedProfiles.length > 0 ||
-    plan.modelAssignments.length > 0
+    plan.modelAssignments.length > 0 ||
+    plan.graphifyAccepted
   );
 }
 
@@ -433,6 +476,15 @@ async function applyPlan(
     modelResult: { configured: [], failed: [] },
     skillResult: { installed: [], unchanged: [], conflicts: [] },
     optionalSkillResult: { installed: [], unchanged: [], conflicts: [] },
+    graphifyResult: {
+      cliInstalled: false,
+      cliAlreadyPresent: false,
+      officialSkillInstalled: false,
+      explorerSkillInstalled: false,
+      explorerSkillUnchanged: false,
+      skipped: true,
+      failed: false,
+    },
   };
 
   // 1. Apply agent changes
@@ -501,6 +553,75 @@ async function applyPlan(
       result.optionalSkillResult.unchanged.push(skill.name);
     } else if (skill.state === "conflict") {
       result.optionalSkillResult.conflicts.push(skill.name);
+    }
+  }
+
+  // 2c. Graphify integration
+  if (plan.graphifyAccepted) {
+    await applyPhaseCheckpoint();
+
+    if (plan.graphifyConflict) {
+      // Conflicting unmarked graphify-explorer file — skip all Graphify steps
+      result.graphifyResult.skipped = true;
+      result.graphifyResult.failed = true;
+      result.graphifyResult.failedStep = "graphify-explorer";
+      result.graphifyResult.failedHint =
+        "A conflicting unmarked graphify-explorer/SKILL.md file exists. " +
+        "Remove it or add the managed marker, then re-run init with --with-graphify.";
+    } else {
+      result.graphifyResult.skipped = false;
+
+      // Step A: Graphify CLI
+      if (isGraphifyAvailable()) {
+        result.graphifyResult.cliAlreadyPresent = true;
+      } else {
+        await applyPhaseCheckpoint();
+        const cliResult = await installGraphifyCli();
+        if (cliResult.success) {
+          result.graphifyResult.cliInstalled = true;
+        } else {
+          result.graphifyResult.failed = true;
+          result.graphifyResult.failedStep = "CLI install";
+          result.graphifyResult.failedHint = cliResult.error;
+        }
+      }
+
+      // Step B: Official OpenCode skill install (only if CLI is available)
+      if (!result.graphifyResult.failed) {
+        await applyPhaseCheckpoint();
+        const skillResult = await installGraphifyOpenCodeSkill(plan.target.scope);
+        if (skillResult.success) {
+          result.graphifyResult.officialSkillInstalled = true;
+        } else {
+          result.graphifyResult.failed = true;
+          result.graphifyResult.failedStep = "official skill install";
+          result.graphifyResult.failedHint = skillResult.error;
+        }
+      }
+
+      // Step C: Install graphify-explorer (only if CLI + official skill succeeded)
+      if (!result.graphifyResult.failed) {
+        await applyPhaseCheckpoint();
+        try {
+          const explorerResult = installManagedSkill("graphify-explorer", plan.target);
+          if (explorerResult === "created") {
+            result.graphifyResult.explorerSkillInstalled = true;
+          } else if (explorerResult === "already_active") {
+            result.graphifyResult.explorerSkillUnchanged = true;
+          } else {
+            // conflict — should not happen since we preflighted, but handle gracefully
+            result.graphifyResult.failed = true;
+            result.graphifyResult.failedStep = "graphify-explorer skill";
+            result.graphifyResult.failedHint =
+              "Could not install graphify-explorer skill (conflict).";
+          }
+        } catch (err) {
+          result.graphifyResult.failed = true;
+          result.graphifyResult.failedStep = "graphify-explorer skill";
+          result.graphifyResult.failedHint =
+            err instanceof Error ? err.message : String(err);
+        }
+      }
     }
   }
 
@@ -665,6 +786,8 @@ export async function initCommand(
     target,
     skillStatuses: coreSkillStatuses,
     selectedOptionalSkills: [],
+    graphifyAccepted: false,
+    graphifyConflict: false,
   };
 
   // Step 3: Agent selection (AC-03, AC-06, AC-07)
@@ -771,6 +894,29 @@ export async function initCommand(
       plan.selectedOptionalSkills = selectableOptionalSkills.filter((s) =>
         selectedSet.has(s.name)
       );
+    }
+  }
+
+  // Step 3c: Graphify integration prompt
+  // Appears after optional skills and before profiles. Defaults to no.
+  // --with-graphify accepts without prompt; --yes alone does not accept.
+  if (options.withGraphify) {
+    plan.graphifyAccepted = true;
+  } else if (!options.yes && !options.dryRun) {
+    const graphifyChoice = await uiConfirmWithCancel(
+      "Graphify can improve repository exploration by generating a local code graph. Install optional Graphify integration?",
+      { default: false }
+    );
+    if (graphifyChoice) {
+      plan.graphifyAccepted = true;
+    }
+  }
+
+  // Check for conflicting unmarked graphify-explorer skill
+  if (plan.graphifyAccepted) {
+    const graphifySkillState = getSkillState("graphify-explorer", target);
+    if (graphifySkillState === "conflict") {
+      plan.graphifyConflict = true;
     }
   }
 
@@ -1083,6 +1229,57 @@ export async function initCommand(
     });
   }
 
+  // Graphify results
+  if (!applyResult.graphifyResult.skipped) {
+    if (applyResult.graphifyResult.cliAlreadyPresent) {
+      resultLines.push({
+        label: "Graphify CLI:",
+        value: "already installed",
+        color: "dim",
+      });
+    } else if (applyResult.graphifyResult.cliInstalled) {
+      resultLines.push({
+        label: "Graphify CLI:",
+        value: "installed",
+        color: "green",
+      });
+    }
+    if (applyResult.graphifyResult.officialSkillInstalled) {
+      resultLines.push({
+        label: "Graphify skill:",
+        value: "installed (official OpenCode skill)",
+        color: "green",
+      });
+    }
+    if (applyResult.graphifyResult.explorerSkillInstalled) {
+      resultLines.push({
+        label: "Graphify explorer:",
+        value: "installed (graphify-explorer)",
+        color: "green",
+      });
+    } else if (applyResult.graphifyResult.explorerSkillUnchanged) {
+      resultLines.push({
+        label: "Graphify explorer:",
+        value: "already installed",
+        color: "dim",
+      });
+    }
+    if (applyResult.graphifyResult.failed) {
+      resultLines.push({
+        label: "Graphify error:",
+        value: applyResult.graphifyResult.failedHint ?? "installation failed",
+        color: "red",
+      });
+    }
+  } else if (applyResult.graphifyResult.failed) {
+    // Conflict case — skipped with error
+    resultLines.push({
+      label: "Graphify:",
+      value: "skipped — graphify-explorer conflict",
+      color: "red",
+    });
+  }
+
   if (resultLines.length > 0) {
     printSummary(resultLines);
   }
@@ -1099,6 +1296,12 @@ export async function initCommand(
 
   if (applyResult.modelResult.failed.length > 0) {
     printWarning(messages.PARTIAL_STATE_WARNING);
+  }
+
+  if (applyResult.graphifyResult.failed && applyResult.graphifyResult.failedHint) {
+    printWarning(
+      `Graphify installation partially failed. ${applyResult.graphifyResult.failedHint}`
+    );
   }
 
   printPaths(target);
