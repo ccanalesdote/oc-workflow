@@ -6,11 +6,14 @@
  */
 
 import pc from "picocolors";
+import { relative } from "node:path";
 import {
   isGraphifyAvailable,
   hasGraph,
   runGraphInit,
   runGraphUpdate,
+  writeGraphifyState,
+  getGraphifyStatePath,
 } from "../lib/graphify.js";
 import {
   printHeader,
@@ -59,6 +62,18 @@ export async function graphifyCommand(
         }
       });
       console.log(pc.green(`   ✅ Graph ${options.force ? "force-" : ""}updated successfully.\n`));
+
+      // Write freshness state after successful graph update
+      const stateResult = writeGraphifyState();
+      if (stateResult.success) {
+        const stateRelPath = relative(process.cwd(), getGraphifyStatePath());
+        console.log(pc.dim(`   Graphify state updated at ${stateRelPath}\n`));
+      } else {
+        printWarning(
+          `   Graph updated but state file could not be written: ${stateResult.error}\n` +
+            "   The graph is still valid; re-run 'opencode-path graphify' to retry."
+        );
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       printError(`   Graph update failed: ${message}`);
@@ -77,6 +92,18 @@ export async function graphifyCommand(
         }
       });
       console.log(pc.green("   ✅ Graph initialized successfully.\n"));
+
+      // Write freshness state after successful graph init
+      const stateResult = writeGraphifyState();
+      if (stateResult.success) {
+        const stateRelPath = relative(process.cwd(), getGraphifyStatePath());
+        console.log(pc.dim(`   Graphify state updated at ${stateRelPath}\n`));
+      } else {
+        printWarning(
+          `   Graph initialized but state file could not be written: ${stateResult.error}\n` +
+            "   The graph is still valid; re-run 'opencode-path graphify' to retry."
+        );
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       printError(`   Graph initialization failed: ${message}`);

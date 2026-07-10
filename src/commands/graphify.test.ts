@@ -6,6 +6,8 @@ vi.mock("../lib/graphify.js", () => ({
   hasGraph: vi.fn(),
   runGraphInit: vi.fn(),
   runGraphUpdate: vi.fn(),
+  writeGraphifyState: vi.fn(),
+  getGraphifyStatePath: vi.fn(),
 }));
 
 import {
@@ -13,6 +15,8 @@ import {
   hasGraph,
   runGraphInit,
   runGraphUpdate,
+  writeGraphifyState,
+  getGraphifyStatePath,
 } from "../lib/graphify.js";
 import { graphifyCommand } from "./graphify.js";
 
@@ -28,6 +32,10 @@ describe("graphifyCommand", () => {
     exitSpy = vi
       .spyOn(process, "exit")
       .mockImplementation((() => undefined as never) as any);
+
+    // Default: state write succeeds with a known path
+    vi.mocked(writeGraphifyState).mockReturnValue({ success: true });
+    vi.mocked(getGraphifyStatePath).mockReturnValue("/repo/.path/graphify-state.json");
   });
 
   afterEach(() => {
@@ -52,11 +60,19 @@ describe("graphifyCommand", () => {
     expect(exitSpy).toHaveBeenCalledWith(1);
   });
 
+  it("does NOT write state when Graphify CLI is unavailable", async () => {
+    vi.mocked(isGraphifyAvailable).mockReturnValue(false);
+
+    await graphifyCommand();
+
+    expect(writeGraphifyState).not.toHaveBeenCalled();
+  });
+
   // ---------------------------------------------------------------------------
   // Initialize graph (no existing graph)
   // ---------------------------------------------------------------------------
 
-  it("initializes new graph when graphify-out/graph.json does not exist", async () => {
+  it("initializes new graph and writes state file", async () => {
     vi.mocked(isGraphifyAvailable).mockReturnValue(true);
     vi.mocked(hasGraph).mockReturnValue(false);
     vi.mocked(runGraphInit).mockResolvedValue({ success: true });
@@ -65,13 +81,15 @@ describe("graphifyCommand", () => {
 
     expect(runGraphInit).toHaveBeenCalled();
     expect(runGraphUpdate).not.toHaveBeenCalled();
+    expect(writeGraphifyState).toHaveBeenCalled();
 
     const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
     expect(output).toContain("Graph initialized successfully");
     expect(output).toContain("Graph exists: no");
+    expect(output).toContain("Graphify state updated at");
   });
 
-  it("reports failure when graph init fails", async () => {
+  it("reports failure when graph init fails and does NOT write state", async () => {
     vi.mocked(isGraphifyAvailable).mockReturnValue(true);
     vi.mocked(hasGraph).mockReturnValue(false);
     vi.mocked(runGraphInit).mockResolvedValue({
@@ -83,16 +101,37 @@ describe("graphifyCommand", () => {
 
     expect(runGraphInit).toHaveBeenCalled();
     expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(writeGraphifyState).not.toHaveBeenCalled();
 
     const errorOutput = errorSpy.mock.calls.map((c) => String(c[0])).join("\n");
     expect(errorOutput).toContain("no Python files found");
+  });
+
+  it("reports warning when init succeeds but state write fails", async () => {
+    vi.mocked(isGraphifyAvailable).mockReturnValue(true);
+    vi.mocked(hasGraph).mockReturnValue(false);
+    vi.mocked(runGraphInit).mockResolvedValue({ success: true });
+    vi.mocked(writeGraphifyState).mockReturnValue({
+      success: false,
+      error: "EACCES: permission denied",
+    });
+
+    await graphifyCommand();
+
+    // Should NOT exit with error — the graph was initialized successfully
+    expect(exitSpy).not.toHaveBeenCalled();
+
+    const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(output).toContain("state file could not be written");
+    expect(output).toContain("EACCES");
+    expect(output).toContain("Graph initialized successfully");
   });
 
   // ---------------------------------------------------------------------------
   // Update existing graph
   // ---------------------------------------------------------------------------
 
-  it("updates existing graph incrementally", async () => {
+  it("updates existing graph incrementally and writes state", async () => {
     vi.mocked(isGraphifyAvailable).mockReturnValue(true);
     vi.mocked(hasGraph).mockReturnValue(true);
     vi.mocked(runGraphUpdate).mockResolvedValue({ success: true });
@@ -101,13 +140,15 @@ describe("graphifyCommand", () => {
 
     expect(runGraphUpdate).toHaveBeenCalledWith(undefined, undefined, expect.any(Object));
     expect(runGraphInit).not.toHaveBeenCalled();
+    expect(writeGraphifyState).toHaveBeenCalled();
 
     const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
     expect(output).toContain("Graph updated successfully");
     expect(output).toContain("Graph exists: yes");
+    expect(output).toContain("Graphify state updated at");
   });
 
-  it("force-updates existing graph when --force is passed", async () => {
+  it("force-updates existing graph when --force is passed and writes state", async () => {
     vi.mocked(isGraphifyAvailable).mockReturnValue(true);
     vi.mocked(hasGraph).mockReturnValue(true);
     vi.mocked(runGraphUpdate).mockResolvedValue({ success: true });
@@ -116,12 +157,13 @@ describe("graphifyCommand", () => {
 
     expect(runGraphUpdate).toHaveBeenCalledWith(undefined, true, expect.any(Object));
     expect(runGraphInit).not.toHaveBeenCalled();
+    expect(writeGraphifyState).toHaveBeenCalled();
 
     const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
     expect(output).toContain("Graph force-updated successfully");
   });
 
-  it("reports failure when graph update fails", async () => {
+  it("reports failure when graph update fails and does NOT write state", async () => {
     vi.mocked(isGraphifyAvailable).mockReturnValue(true);
     vi.mocked(hasGraph).mockReturnValue(true);
     vi.mocked(runGraphUpdate).mockResolvedValue({
@@ -133,16 +175,37 @@ describe("graphifyCommand", () => {
 
     expect(runGraphUpdate).toHaveBeenCalled();
     expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(writeGraphifyState).not.toHaveBeenCalled();
 
     const errorOutput = errorSpy.mock.calls.map((c) => String(c[0])).join("\n");
     expect(errorOutput).toContain("update failed");
+  });
+
+  it("reports warning when update succeeds but state write fails", async () => {
+    vi.mocked(isGraphifyAvailable).mockReturnValue(true);
+    vi.mocked(hasGraph).mockReturnValue(true);
+    vi.mocked(runGraphUpdate).mockResolvedValue({ success: true });
+    vi.mocked(writeGraphifyState).mockReturnValue({
+      success: false,
+      error: "ENOSPC: no space left on device",
+    });
+
+    await graphifyCommand();
+
+    // Should NOT exit — graph updated successfully
+    expect(exitSpy).not.toHaveBeenCalled();
+
+    const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(output).toContain("state file could not be written");
+    expect(output).toContain("ENOSPC");
+    expect(output).toContain("Graph updated successfully");
   });
 
   // ---------------------------------------------------------------------------
   // --force with no graph → initialize normally
   // ---------------------------------------------------------------------------
 
-  it("--force with no graph initializes normally (no force-init)", async () => {
+  it("--force with no graph initializes normally and writes state", async () => {
     vi.mocked(isGraphifyAvailable).mockReturnValue(true);
     vi.mocked(hasGraph).mockReturnValue(false);
     vi.mocked(runGraphInit).mockResolvedValue({ success: true });
@@ -152,6 +215,7 @@ describe("graphifyCommand", () => {
     // Should initialize (not force-update) when no graph exists
     expect(runGraphInit).toHaveBeenCalled();
     expect(runGraphUpdate).not.toHaveBeenCalled();
+    expect(writeGraphifyState).toHaveBeenCalled();
 
     const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
     expect(output).toContain("Graph initialized successfully");

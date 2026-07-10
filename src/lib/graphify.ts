@@ -13,8 +13,24 @@
  */
 
 import { execFileSync, execFile, type ExecFileException } from "node:child_process";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+
+// ---------------------------------------------------------------------------
+// Graphify install constants
+// ---------------------------------------------------------------------------
+
+/**
+ * Compatible Graphify version range for new installs.
+ * Use `0.9.x` line until a future compatibility review expands the range.
+ */
+export const GRAPHIFY_COMPATIBLE_RANGE = ">=0.9.0,<0.10.0";
+
+/**
+ * Full pip-compatible install spec passed to `uv tool install`.
+ * Must be used as an array element, not shell-quoted.
+ */
+export const GRAPHIFY_INSTALL_SPEC = `graphifyy${GRAPHIFY_COMPATIBLE_RANGE}`;
 
 // ---------------------------------------------------------------------------
 // Low-level child-process helper
@@ -138,7 +154,7 @@ export async function installGraphifyCli(
   }
 
   try {
-    await execFilePromise("uv", ["tool", "install", "graphifyy"], { signal });
+    await execFilePromise("uv", ["tool", "install", GRAPHIFY_INSTALL_SPEC], { signal });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { success: false, error: message };
@@ -178,6 +194,155 @@ export async function installGraphifyOpenCodeSkill(
 
   try {
     await execFilePromise("graphify", args, { signal });
+    return { success: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { success: false, error: message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Graphify version detection
+// ---------------------------------------------------------------------------
+
+/**
+ * Result from `graphify --version` parsing.
+ *
+ * - `raw`: trimmed raw stdout from the version command, or `null` when
+ *   the command could not be executed.
+ * - `version`: parsed semantic version string or `null` when parsing fails
+ *   or the command was not available.
+ */
+export interface GraphifyVersionResult {
+  raw: string | null;
+  version: string | null;
+}
+
+/**
+ * Obtain Graphify version by running `graphify --version`.
+ *
+ * Returns both the raw stdout (trimmed) and a best-effort parsed semantic
+ * version. If the CLI is unavailable or the output cannot be parsed, the
+ * corresponding fields are `null`.
+ */
+export function getGraphifyVersion(): GraphifyVersionResult {
+  try {
+    const raw = execFileSync("graphify", ["--version"], {
+      encoding: "utf-8",
+      stdio: "pipe",
+    }).trim();
+
+    if (!raw) {
+      return { raw: null, version: null };
+    }
+
+    // Best-effort parse: match a semver-like substring (e.g. "1.2.3" or "v1.2.3").
+    // Graphify output may include prefixes like "graphify " or "graphifyy ".
+    const versionMatch = raw.match(/\d+\.\d+\.\d+/);
+    const version = versionMatch ? versionMatch[0] : null;
+
+    return { raw, version };
+  } catch {
+    return { raw: null, version: null };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Graphify freshness state (.path/graphify-state.json)
+// ---------------------------------------------------------------------------
+
+/**
+ * Shape of `.path/graphify-state.json` — advisory metadata written after a
+ * successful graph refresh through `opencode-path graphify`.
+ */
+export interface GraphifyState {
+  schemaVersion: 1;
+  updatedAt: string; // ISO timestamp
+  graphifyVersion: string | null;
+  graphifyVersionRaw: string | null;
+  graphifyCompatibleRange: string;
+  commit: string | null;
+  workingTreeDirty: boolean | null;
+}
+
+/**
+ * Resolve the `.path/graphify-state.json` path relative to the command cwd.
+ */
+export function getGraphifyStatePath(cwd?: string): string {
+  const dir = cwd ?? process.cwd();
+  return join(dir, ".path", "graphify-state.json");
+}
+
+/**
+ * Get the current `HEAD` commit hash via `git rev-parse --verify HEAD`.
+ * Returns the hash or `null` when Git is unavailable or HEAD does not exist.
+ */
+export function getGraphifyGitCommit(cwd?: string): string | null {
+  try {
+    const output = execFileSync("git", ["rev-parse", "--verify", "HEAD"], {
+      encoding: "utf-8",
+      cwd,
+      stdio: "pipe",
+    });
+    return output.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check whether the working tree is dirty via `git status --porcelain`.
+ * Returns `true` when there are modified/staged/untracked files,
+ * `false` when clean, and `null` when Git is unavailable.
+ */
+export function getGraphifyGitDirty(cwd?: string): boolean | null {
+  try {
+    const output = execFileSync("git", ["status", "--porcelain"], {
+      encoding: "utf-8",
+      cwd,
+      stdio: "pipe",
+    });
+    return output.length > 0;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Write `.path/graphify-state.json` after a successful graph refresh.
+ *
+ * Gathers Graphify version, Git metadata, and timestamp. Creates the `.path/`
+ * directory when it does not exist. Returns an error when the state file
+ * cannot be written (e.g. filesystem error), but never fails because of
+ * unavailable Git or Graphify version — those are recorded as `null`.
+ */
+export function writeGraphifyState(
+  cwd?: string
+): { success: boolean; error?: string } {
+  const statePath = getGraphifyStatePath(cwd);
+  const dir = cwd ?? process.cwd();
+
+  // Gather Graphify version info (best-effort)
+  const versionResult = getGraphifyVersion();
+
+  // Gather Git metadata (best-effort)
+  const commit = getGraphifyGitCommit(dir);
+  const workingTreeDirty = getGraphifyGitDirty(dir);
+
+  const state: GraphifyState = {
+    schemaVersion: 1,
+    updatedAt: new Date().toISOString(),
+    graphifyVersion: versionResult.version,
+    graphifyVersionRaw: versionResult.raw,
+    graphifyCompatibleRange: GRAPHIFY_COMPATIBLE_RANGE,
+    commit,
+    workingTreeDirty,
+  };
+
+  try {
+    // Ensure the `.path/` directory exists
+    mkdirSync(dirname(statePath), { recursive: true });
+    writeFileSync(statePath, JSON.stringify(state, null, 2) + "\n", "utf-8");
     return { success: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

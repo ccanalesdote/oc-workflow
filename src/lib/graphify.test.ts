@@ -4,6 +4,8 @@ import {
   mkdirSync,
   writeFileSync,
   rmSync,
+  readFileSync,
+  existsSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -26,6 +28,14 @@ import {
   hasGraph,
   runGraphInit,
   runGraphUpdate,
+  getGraphifyVersion,
+  GRAPHIFY_INSTALL_SPEC,
+  getGraphifyStatePath,
+  getGraphifyGitCommit,
+  getGraphifyGitDirty,
+  writeGraphifyState,
+  GRAPHIFY_COMPATIBLE_RANGE,
+  type GraphifyState,
 } from "./graphify.js";
 
 // ------- helpers -------
@@ -130,7 +140,7 @@ describe("installGraphifyCli", () => {
     expect(result.error).toBeUndefined();
     expect(execFileMock).toHaveBeenCalledWith(
       "uv",
-      ["tool", "install", "graphifyy"],
+      ["tool", "install", GRAPHIFY_INSTALL_SPEC],
       expect.any(Object),
       expect.any(Function)
     );
@@ -242,6 +252,237 @@ describe("installGraphifyOpenCodeSkill", () => {
     const result = await installGraphifyOpenCodeSkill("project");
     expect(result.success).toBe(false);
     expect(result.error).toContain("install failed");
+  });
+});
+
+// ------- version detection -------
+
+describe("getGraphifyVersion", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it("returns parsed version and raw output when graphify --version succeeds", () => {
+    execFileSyncMock.mockReturnValueOnce("graphify 0.9.11\n");
+
+    const result = getGraphifyVersion();
+    expect(result.raw).toBe("graphify 0.9.11");
+    expect(result.version).toBe("0.9.11");
+    expect(execFileSyncMock).toHaveBeenCalledWith("graphify", ["--version"], expect.any(Object));
+  });
+
+  it("parses version without prefix (e.g. '0.9.11')", () => {
+    execFileSyncMock.mockReturnValueOnce("0.9.11\n");
+
+    const result = getGraphifyVersion();
+    expect(result.raw).toBe("0.9.11");
+    expect(result.version).toBe("0.9.11");
+  });
+
+  it("returns version: null when output has no semver", () => {
+    execFileSyncMock.mockReturnValueOnce("graphify (development build)\n");
+
+    const result = getGraphifyVersion();
+    expect(result.raw).toBe("graphify (development build)");
+    expect(result.version).toBeNull();
+  });
+
+  it("returns raw: null and version: null when command fails", () => {
+    execFileSyncMock.mockImplementationOnce(() => {
+      throw new Error("command not found");
+    });
+
+    const result = getGraphifyVersion();
+    expect(result.raw).toBeNull();
+    expect(result.version).toBeNull();
+  });
+
+  it("returns raw: null and version: null when output is empty", () => {
+    execFileSyncMock.mockReturnValueOnce("   \n");
+
+    const result = getGraphifyVersion();
+    expect(result.raw).toBeNull();
+    expect(result.version).toBeNull();
+  });
+});
+
+// ------- freshness state (.path/graphify-state.json) -------
+
+describe("getGraphifyStatePath", () => {
+  it("returns .path/graphify-state.json under the given cwd", () => {
+    const result = getGraphifyStatePath("/my/repo");
+    expect(result).toBe("/my/repo/.path/graphify-state.json");
+  });
+
+  it("uses process.cwd() when no cwd argument is given", () => {
+    // Should not throw and should end with the expected relative path
+    const result = getGraphifyStatePath();
+    expect(result).toContain(".path/graphify-state.json");
+  });
+});
+
+describe("getGraphifyGitCommit", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it("returns commit hash when git rev-parse succeeds", () => {
+    execFileSyncMock.mockReturnValueOnce("abc123def456\n");
+    const result = getGraphifyGitCommit("/repo");
+    expect(result).toBe("abc123def456");
+    expect(execFileSyncMock).toHaveBeenCalledWith(
+      "git",
+      ["rev-parse", "--verify", "HEAD"],
+      expect.any(Object)
+    );
+  });
+
+  it("returns null when git rev-parse fails", () => {
+    execFileSyncMock.mockImplementationOnce(() => {
+      throw new Error("fatal: not a git repository");
+    });
+    const result = getGraphifyGitCommit("/not-repo");
+    expect(result).toBeNull();
+  });
+
+  it("returns null when output is whitespace only", () => {
+    execFileSyncMock.mockReturnValueOnce("   \n");
+    const result = getGraphifyGitCommit("/repo");
+    expect(result).toBeNull();
+  });
+});
+
+describe("getGraphifyGitDirty", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it("returns true when git status shows changes", () => {
+    execFileSyncMock.mockReturnValueOnce(" M src/file.ts\n");
+    const result = getGraphifyGitDirty("/repo");
+    expect(result).toBe(true);
+  });
+
+  it("returns false when git status output is empty", () => {
+    execFileSyncMock.mockReturnValueOnce("");
+    const result = getGraphifyGitDirty("/repo");
+    expect(result).toBe(false);
+  });
+
+  it("returns null when git status fails", () => {
+    execFileSyncMock.mockImplementationOnce(() => {
+      throw new Error("fatal: not a git repository");
+    });
+    const result = getGraphifyGitDirty("/not-repo");
+    expect(result).toBeNull();
+  });
+});
+
+describe("writeGraphifyState", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    tmpDir = mkdtempSync(join(tmpdir(), "graphify-state-"));
+    // Default: graphify --version returns a known version
+    execFileSyncMock.mockReturnValue("graphify 0.9.11\n");
+  });
+
+  afterEach(() => {
+    if (tmpDir) rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("writes valid JSON state with all metadata fields", () => {
+    // Git commit available
+    execFileSyncMock.mockReturnValueOnce("graphify 0.9.11\n");
+    execFileSyncMock.mockReturnValueOnce("abc123def456\n"); // git rev-parse
+    execFileSyncMock.mockReturnValueOnce(" M src/file.ts\n"); // git status
+
+    const result = writeGraphifyState(tmpDir);
+    expect(result.success).toBe(true);
+
+    const statePath = getGraphifyStatePath(tmpDir);
+    const raw = readFileSync(statePath, "utf-8");
+    const parsed: GraphifyState = JSON.parse(raw);
+
+    expect(parsed.schemaVersion).toBe(1);
+    expect(parsed.updatedAt).toBeTruthy();
+    expect(new Date(parsed.updatedAt).getTime()).toBeGreaterThan(0);
+    expect(parsed.graphifyVersion).toBe("0.9.11");
+    expect(parsed.graphifyVersionRaw).toBe("graphify 0.9.11");
+    expect(parsed.graphifyCompatibleRange).toBe(GRAPHIFY_COMPATIBLE_RANGE);
+    expect(parsed.commit).toBe("abc123def456");
+    expect(parsed.workingTreeDirty).toBe(true);
+  });
+
+  it("records null for commit and workingTreeDirty when git is unavailable", () => {
+    // graphify --version succeeds
+    execFileSyncMock.mockReturnValueOnce("graphify 0.9.11\n");
+    // git rev-parse fails
+    execFileSyncMock.mockImplementationOnce(() => {
+      throw new Error("not a git repository");
+    });
+    // git status also fails
+    execFileSyncMock.mockImplementationOnce(() => {
+      throw new Error("not a git repository");
+    });
+
+    const result = writeGraphifyState(tmpDir);
+    expect(result.success).toBe(true);
+
+    const statePath = getGraphifyStatePath(tmpDir);
+    const raw = readFileSync(statePath, "utf-8");
+    const parsed: GraphifyState = JSON.parse(raw);
+
+    expect(parsed.commit).toBeNull();
+    expect(parsed.workingTreeDirty).toBeNull();
+  });
+
+  it("records graphifyVersion: null when version is unparseable", () => {
+    // graphify --version returns something without a semver
+    execFileSyncMock.mockReturnValueOnce("graphify development\n");
+    // git succeeded (but we don't care here)
+    execFileSyncMock.mockReturnValueOnce("\n");
+
+    const result = writeGraphifyState(tmpDir);
+    expect(result.success).toBe(true);
+
+    const statePath = getGraphifyStatePath(tmpDir);
+    const raw = readFileSync(statePath, "utf-8");
+    const parsed: GraphifyState = JSON.parse(raw);
+
+    expect(parsed.graphifyVersion).toBeNull();
+    expect(parsed.graphifyVersionRaw).toBe("graphify development");
+  });
+
+  it("returns failure when state file cannot be written (filesystem error)", () => {
+    // Point to a non-existent parent directory above a read-only root
+    // Use a path that will fail: /dev/null is not a directory
+    // graphify --version succeeds
+    execFileSyncMock.mockReturnValueOnce("graphify 0.9.11\n");
+    // Both git calls fail gracefully
+    execFileSyncMock.mockImplementationOnce(() => {
+      throw new Error("not a git repository");
+    });
+
+    // Write to /dev which doesn't allow subdirectory creation
+    const result = writeGraphifyState("/dev");
+    expect(result.success).toBe(false);
+    expect(result.error).toBeTruthy();
+  });
+
+  it("creates .path directory when it does not exist", () => {
+    // graphify --version succeeds
+    execFileSyncMock.mockReturnValueOnce("graphify 0.9.11\n");
+    execFileSyncMock.mockReturnValueOnce("\n");
+
+    // Ensure .path does not exist yet
+    const dotPathDir = join(tmpDir, ".path");
+    expect(existsSync(dotPathDir)).toBe(false);
+
+    const result = writeGraphifyState(tmpDir);
+    expect(result.success).toBe(true);
+    expect(existsSync(dotPathDir)).toBe(true);
   });
 });
 
