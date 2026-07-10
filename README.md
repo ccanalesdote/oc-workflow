@@ -112,6 +112,32 @@ opencode-path init [options]
 
 **`--dry-run`** runs the entire selection flow, shows the consolidated summary, and exits `0` without writing any files.
 
+**Optional Graphify integration:** `init` will offer to install [Graphify](https://github.com/ggcaponetto/graphify) as an optional aid for repository exploration. It defaults to no and is not installed unless you accept the prompt. Pass `--with-graphify` to accept without the prompt. `--yes` alone does **not** accept Graphify. The integration installs the official Graphify CLI (via `uv tool install graphifyy`), the official OpenCode skill, and a managed `graphify-explorer` skill for the Explorer agent. Failure of any Graphify step does **not** abort the overall `opencode-path` installation. Graphify hooks and automatic graph refresh are intentionally **not** installed.
+
+---
+
+### `graphify`
+
+Initialize or incrementally update the local Graphify repository graph.
+
+```
+opencode-path graphify [options]
+```
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--force` | Force-update an existing graph (maps to `graphify update . --force`) |
+
+**Behavior:**
+
+1. Verifies the Graphify CLI is available. If not, prints an actionable error directing you to run `opencode-path init --with-graphify` or install Graphify manually.
+2. If `graphify-out/graph.json` does not exist, runs `graphify .` to initialize a new graph.
+3. If `graphify-out/graph.json` exists, runs `graphify update .` for an incremental update.
+4. With `--force` and an existing graph, runs `graphify update . --force`. With `--force` and no graph, initializes normally.
+5. Does **not** install hooks, create branches, create worktrees, or modify `.path/work`.
+
 ---
 
 ### `agents`
