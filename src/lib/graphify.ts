@@ -258,6 +258,7 @@ export function getGraphifyVersion(): GraphifyVersionResult {
 export interface GraphifyState {
   schemaVersion: 1;
   updatedAt: string; // ISO timestamp
+  graphifyMode: "local-code";
   graphifyVersion: string | null;
   graphifyVersionRaw: string | null;
   graphifyCompatibleRange: string;
@@ -332,6 +333,7 @@ export function writeGraphifyState(
   const state: GraphifyState = {
     schemaVersion: 1,
     updatedAt: new Date().toISOString(),
+    graphifyMode: "local-code",
     graphifyVersion: versionResult.version,
     graphifyVersionRaw: versionResult.raw,
     graphifyCompatibleRange: GRAPHIFY_COMPATIBLE_RANGE,
@@ -370,7 +372,7 @@ export function hasGraph(cwd?: string): boolean {
 // ---------------------------------------------------------------------------
 
 /**
- * Run `graphify .` to initialize a new graph in the current directory.
+ * Run `graphify . --code-only` to initialize a new local code graph in the current directory.
  * Assumes the caller has already verified `isGraphifyAvailable()`.
  */
 export async function runGraphInit(
@@ -378,7 +380,7 @@ export async function runGraphInit(
   signal?: AbortSignal
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await execFilePromise("graphify", ["."], { cwd, signal });
+    await execFilePromise("graphify", [".", "--code-only"], { cwd, signal });
     return { success: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -388,6 +390,7 @@ export async function runGraphInit(
 
 /**
  * Run `graphify update .` to incrementally update an existing graph.
+ * Graphify documents `update` as code-file re-extraction with no LLM needed.
  *
  * When `force` is true, appends `--force` to the argument list, resulting in
  * `graphify update . --force`.

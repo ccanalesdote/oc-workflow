@@ -4,43 +4,24 @@ A structured multi-agent workflow CLI for [opencode](https://opencode.ai) that i
 
 ## Overview
 
-The workflow follows a structured pipeline from requirements to reviewed implementation, with optional entry points and a user-invoked audit layer:
+The workflow follows a structured pipeline from requirements to reviewed implementation, with optional support paths and a user-invoked audit layer:
 
-```mermaid
-flowchart TD
-    User([User])
+```text
+Normal path:
+  User -> Spec -> Architect -> Developer -> Reviewer -> User
 
-    subgraph optional_entry["Optional entry (primary)"]
-        Spec["Spec\nClarifies vague stories"]
-        Research["Research\nVerifies docs & APIs"]
-    end
+Short path for already-clear work:
+  User -> Architect -> Developer -> Reviewer -> User
 
-    Architect["Architect\nDesigns the solution\n(primary)"]
-    Developer["Developer\nImplements changes\n(primary)"]
-    Reviewer(["Reviewer\nQuality gate\n(subagent · Developer-invoked)"])
-    Auditor["Auditor\nSkeptical forensic review\n(primary · user-invoked)"]
-    Explore(["Explore\nCodebase reconnaissance\n(subagent · built-in)"])
-
-    User -->|vague story| Spec
-    User -->|need docs/facts| Research
-    User --> Architect
-    Spec -.->|spec ready| Architect
-    Research -.->|facts| Architect
-    Architect --> Developer
-    Developer -->|always before done| Reviewer
-    Reviewer -->|FAIL: fix & retry| Developer
-    Reviewer -->|PASS| User
-
-    User -.->|audit request| Auditor
-
-    Architect -.->|reconnaissance| Explore
-    Developer -.->|reconnaissance| Explore
-    Auditor -.->|reconnaissance| Explore
+Support paths:
+  Research may support Spec or Architect when docs, APIs, SDK behavior, or facts are needed.
+  Explore may be invoked by workflow agents for bounded codebase reconnaissance.
+  Auditor is an optional user-invoked audit path after or alongside implementation.
 ```
 
-**Legend:** Solid arrows = primary flow · Dashed arrows = optional/support paths · `(subagent)` = invoked by another agent, not directly by user.
+Developer must invoke Reviewer before declaring implementation done. Reviewer returns PASS/FAIL; on FAIL, Developer fixes the findings and asks Reviewer again. Explore is not a primary workflow owner — it is a read-only support subagent for reconnaissance.
 
-This workflow defines 6 specialized agents with clear responsibilities:
+This workflow defines specialized agents with clear responsibilities:
 
 | Agent | Role | Mode | Permissions |
 |-------|------|------|-------------|
@@ -55,7 +36,7 @@ This workflow defines 6 specialized agents with clear responsibilities:
 ### Key Design Principles
 
 1. **Blast Radius Minimization**: Only Developer modifies application code broadly. Architect can create/write handoff artifacts, Reviewer is strictly read-only, and Auditor may only append narrow audit notes when auditing an explicit or clearly detectable work folder.
-2. **Separation of Concerns**: Clarify (Spec) → Research (Research) → Design (Architect) → Implement (Developer) → Review (Reviewer) → Audit (Auditor).
+2. **Separation of Concerns**: Clarify (Spec) → Design (Architect) → Implement (Developer) → Review (Reviewer). Research supports facts/docs when needed; Audit is optional and user-invoked.
 3. **Cross-Session Planning**: Architect produces self-contained cross-session artifacts under `.path/work/{feature-slug}/`.
 4. **Granular Permissions**: Risk-based bash policy for Developer; Reviewer is strictly read-only; Auditor is read-only for code with a narrow work-folder audit-note exception; Architect can only create work-folder directories under `.path/work/`.
 5. **Model-Agnostic by Default**: No models are hardcoded. Use `opencode-path models` to configure models explicitly for each agent.
@@ -115,13 +96,13 @@ opencode-path init [options]
 
 When `--yes` is used, the plan and marked-overwrite warning remain visible and the existing final prompt is skipped. It authorizes eligible architecture creates/updates as well as the other selected changes. Unmarked conflicts are always reported as `Skipped conflict` and preserved.
 
-**Optional Graphify integration:** `init` will offer to install [Graphify](https://github.com/ggcaponetto/graphify) as an optional aid for repository exploration. It defaults to no and is not installed unless you accept the prompt. Pass `--with-graphify` to accept without the prompt. `--yes` alone does **not** accept Graphify. The integration installs the official Graphify CLI (via `uv tool install graphifyy`), the official OpenCode skill, and a managed `graphify-explorer` skill for the Explorer agent. Failure of any Graphify step does **not** abort the overall `opencode-path` installation. Graphify hooks and automatic graph refresh are intentionally **not** installed.
+**Optional Graphify integration:** `init` will offer to install [Graphify](https://github.com/Graphify-Labs/graphify) as an optional aid for repository exploration. It defaults to no and is not installed unless you accept the prompt. Pass `--with-graphify` to accept without the prompt. `--yes` alone does **not** accept Graphify. The integration installs the official Graphify CLI (via `uv tool install graphifyy`), the official OpenCode skill, and a managed `graphify-explorer` skill for the Explorer agent. Failure of any Graphify step does **not** abort the overall `opencode-path` installation. Graphify hooks and automatic graph refresh are intentionally **not** installed. The separate `opencode-path graphify` refresh command uses local/no-LLM code graphing by default and does not ask for API keys.
 
 ---
 
 ### `graphify`
 
-Initialize or incrementally update the local Graphify repository graph.
+Initialize or incrementally update the local Graphify repository graph using opencode-path's local/no-LLM code graphing defaults.
 
 ```
 opencode-path graphify [options]
@@ -136,11 +117,14 @@ opencode-path graphify [options]
 **Behavior:**
 
 1. Verifies the Graphify CLI is available. If not, prints an actionable error directing you to run `opencode-path init --with-graphify` or install Graphify manually.
-2. If `graphify-out/graph.json` does not exist, runs `graphify .` to initialize a new graph.
-3. If `graphify-out/graph.json` exists, runs `graphify update .` for an incremental update.
-4. With `--force` and an existing graph, runs `graphify update . --force`. With `--force` and no graph, initializes normally.
-5. After a successful init or update, attempts to write `.path/graphify-state.json` with freshness metadata: schema version, timestamp, Graphify version, compatible install range, Git commit, and working tree dirty status. If the state file cannot be written (e.g. filesystem error), a warning is printed but the graph refresh is still considered successful.
-6. Does **not** install hooks, create branches, create worktrees, or modify `.path/work`.
+2. Prints that it is using local code graph mode with no LLM/API keys, and points semantic docs/media users to the direct Graphify CLI.
+3. If `graphify-out/graph.json` does not exist, runs `graphify . --code-only` to initialize a new local code graph.
+4. If `graphify-out/graph.json` exists, runs Graphify's documented no-LLM code-file update command: `graphify update .`.
+5. With `--force` and an existing graph, runs `graphify update . --force`. With `--force` and no graph, initializes normally.
+6. After a successful init or update, attempts to write `.path/graphify-state.json` with freshness metadata: schema version, timestamp, Graphify mode, Graphify version, compatible install range, Git commit, and working tree dirty status. If the state file cannot be written (e.g. filesystem error), a warning is printed but the graph refresh is still considered successful.
+7. Does **not** install hooks, create branches, create worktrees, or modify `.path/work`.
+
+`opencode-path graphify` intentionally does not expose semantic/full extraction flags, backend selection, API-key prompts, or arbitrary Graphify pass-through arguments. If you intentionally want Graphify to process docs, PDFs, images, video, or other media with its semantic extraction flow, run Graphify directly (for example, `graphify .`) and follow Graphify's own backend/API-key documentation.
 
 **Graphify freshness state (`.path/graphify-state.json`):**
 
@@ -150,6 +134,7 @@ After a successful `opencode-path graphify` run, a `.path/graphify-state.json` f
 |-------|-------------|
 | `schemaVersion` | Schema version (`1`) |
 | `updatedAt` | ISO 8601 timestamp of the refresh |
+| `graphifyMode` | Mode used by opencode-path (currently `"local-code"`) |
 | `graphifyVersion` | Parsed semantic version string (e.g. `"0.9.11"`) or `null` |
 | `graphifyVersionRaw` | Raw `graphify --version` output or `null` |
 | `graphifyCompatibleRange` | Compatible install range (currently `>=0.9.0,<0.10.0`) |
@@ -167,6 +152,7 @@ The state file is advisory — it helps Explorer judge graph freshness without a
 **Default behavior:**
 
 - Graphify hooks, background/watch refresh, and automatic graph rebuilds on Explorer use are **not** installed or enabled by default.
+- `opencode-path graphify` is local/no-LLM by default: initial graph creation uses Graphify's explicit code-only extraction, and existing graph refresh uses Graphify's documented no-LLM code update path. opencode-path does not request API keys, consume LLM tokens, or send repository content to external LLM providers.
 - Explorer may use `.path/graphify-state.json` metadata as a freshness hint during medium/large reconnaissance, but it will not auto-refresh the graph.
 - When closing a feature, Developer may suggest running `opencode-path graphify` before commits if `.path/graphify-state.json` exists — skipping the refresh is always valid.
 
@@ -202,6 +188,38 @@ opencode-path agents [options]
 |-----------|-------------|--------------------------------------|
 | Activate | Install `.md` file from template | Remove `disable: true` from config |
 | Deactivate | Delete `.md` file | Set `disable: true` in config |
+
+---
+
+### `skills`
+
+Manage optional workflow skills in the selected project or global scope.
+
+```
+opencode-path skills [options]
+```
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--global` | Use global scope |
+| `--project` | Use project scope |
+| `--dry-run` | Show planned changes without applying |
+| `-y, --yes` | Skip the confirmation prompt |
+
+**Behavior:**
+
+1. Resolves scope and displays the selected target paths.
+2. Validates all skill templates before prompting. Malformed templates stop the command without applying changes.
+3. Shows optional managed skills in a checkbox multi-select with status glyphs: `●` active, `○` missing, `✕` conflict.
+4. Checked optional skills will be installed if missing. Unchecked active optional skills will be removed if they are managed by opencode-path.
+5. Core skills are shown informationally and cannot be removed by this command.
+6. Conflict skills are manual files without the managed marker. They are displayed but disabled and are not overwritten, modified, or deleted.
+7. Shows planned changes. In `--dry-run` mode, exits without writing.
+8. Asks for confirmation (skipped by `--yes`), then applies installs/removals and prints a restart reminder.
+
+Like managed agents, managed skills use the hidden marker (`<!-- managed-by: opencode-path -->`) so the CLI can distinguish its own files from manual files.
 
 ---
 

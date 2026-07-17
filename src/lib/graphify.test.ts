@@ -408,6 +408,7 @@ describe("writeGraphifyState", () => {
     expect(parsed.schemaVersion).toBe(1);
     expect(parsed.updatedAt).toBeTruthy();
     expect(new Date(parsed.updatedAt).getTime()).toBeGreaterThan(0);
+    expect(parsed.graphifyMode).toBe("local-code");
     expect(parsed.graphifyVersion).toBe("0.9.11");
     expect(parsed.graphifyVersionRaw).toBe("graphify 0.9.11");
     expect(parsed.graphifyCompatibleRange).toBe(GRAPHIFY_COMPATIBLE_RANGE);
@@ -530,20 +531,20 @@ describe("runGraphInit", () => {
     vi.resetAllMocks();
   });
 
-  it("runs 'graphify .' and returns success", async () => {
+  it("runs 'graphify . --code-only' and returns success", async () => {
     mockExecFileOk("Graph initialized\n");
 
     const result = await runGraphInit();
     expect(result.success).toBe(true);
     expect(execFileMock).toHaveBeenCalledWith(
       "graphify",
-      ["."],
+      [".", "--code-only"],
       expect.any(Object),
       expect.any(Function)
     );
   });
 
-  it("returns failure when graphify . fails", async () => {
+  it("returns failure when graphify . --code-only fails", async () => {
     mockExecFileFail("no files found");
 
     const result = await runGraphInit();

@@ -57,6 +57,7 @@ describe("graphifyCommand", () => {
     const errorOutput = errorSpy.mock.calls.map((c) => String(c[0])).join("\n");
     expect(errorOutput).toContain("Graphify CLI is not installed");
     expect(errorOutput).toContain("opencode-path init --with-graphify");
+    expect(errorOutput).toContain("https://github.com/Graphify-Labs/graphify");
     expect(exitSpy).toHaveBeenCalledWith(1);
   });
 
@@ -86,6 +87,10 @@ describe("graphifyCommand", () => {
     const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
     expect(output).toContain("Graph initialized successfully");
     expect(output).toContain("Graph exists: no");
+    expect(output).toContain("Mode: local code graph");
+    expect(output).toContain("no LLM/API keys");
+    expect(output).toContain("For full semantic docs/media extraction");
+    expect(output).toContain("use Graphify directly: graphify .");
     expect(output).toContain("Graphify state updated at");
   });
 
@@ -145,6 +150,9 @@ describe("graphifyCommand", () => {
     const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
     expect(output).toContain("Graph updated successfully");
     expect(output).toContain("Graph exists: yes");
+    expect(output).toContain("Mode: local code graph");
+    expect(output).toContain("no LLM/API keys");
+    expect(output).toContain("For full semantic docs/media extraction");
     expect(output).toContain("Graphify state updated at");
   });
 

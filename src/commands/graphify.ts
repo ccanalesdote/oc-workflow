@@ -37,9 +37,9 @@ export async function graphifyCommand(
   // Verify Graphify CLI is available
   if (!isGraphifyAvailable()) {
     printError(
-      "   Graphify CLI is not installed or not on PATH.\n" +
+        "   Graphify CLI is not installed or not on PATH.\n" +
         "   Run 'opencode-path init --with-graphify' to install it, or\n" +
-        "   install Graphify manually: https://github.com/ggcaponetto/graphify"
+        "   install Graphify manually: https://github.com/Graphify-Labs/graphify"
     );
     process.exit(1);
   }
@@ -47,11 +47,13 @@ export async function graphifyCommand(
   const graphExists = hasGraph();
 
   console.log(pc.dim(`   Graph exists: ${graphExists ? "yes" : "no"}`));
+  console.log(pc.dim("   Mode: local code graph — no LLM/API keys."));
+  console.log(pc.dim("   For full semantic docs/media extraction, use Graphify directly: graphify ."));
 
   if (graphExists) {
     // Update existing graph
     const mode = options.force ? "force update" : "incremental update";
-    console.log(pc.dim(`   Mode: ${mode}`));
+    console.log(pc.dim(`   Operation: ${mode}`));
     console.log();
 
     try {
@@ -81,7 +83,7 @@ export async function graphifyCommand(
     }
   } else {
     // Initialize new graph
-    console.log(pc.dim("   Mode: initialize"));
+    console.log(pc.dim("   Operation: initialize"));
     console.log();
 
     try {
