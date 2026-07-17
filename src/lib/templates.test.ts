@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { getTemplatesDir, getTemplatePath, readTemplate, listTemplates } from "./templates.js";
 import { parseFrontmatter } from "./frontmatter.js";
+import { readSkillTemplate } from "./skills.js";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
@@ -228,8 +229,8 @@ describe("template permission invariants", () => {
     expect(content).not.toMatch(/After Architect produces a design/i);
   });
 
-  it("architect.md defines all required Implementation Contract subsections (AC-02, AC-08)", () => {
-    const content = readTemplate("architect");
+  it("local-architecture defines all required Implementation Contract subsections (AC-02, AC-08)", () => {
+    const content = readSkillTemplate("local-architecture");
     const requiredSubsections = [
       "Target files and areas",
       "Expected changes by area",
@@ -240,17 +241,20 @@ describe("template permission invariants", () => {
       "Do not touch / do not introduce",
     ];
 
-    // Extract the brief.md schema block
-    const briefSchema = content.split("### `brief.md`")[1]?.split("### `tasks.md`")[0];
+    // Extract the local brief.md schema block
+    const briefSchema = content
+      .split("## `brief.md` local schema")[1]
+      ?.split("## Acceptance criteria and coverage mapping")[0];
     expect(briefSchema).toBeDefined();
     for (const sub of requiredSubsections) {
       expect(briefSchema).toContain(`### ${sub}`);
     }
 
-    // Extract the exit gate section and verify all 7 subsections appear
-    const exitGate = content.split("## Implementation-ready exit gate")[1]?.split("## Technology-agnostic planning")[0];
+    // Extract the local exit gate section and verify all 7 subsections appear
+    const exitGate = content
+      .split("## Local implementation-ready exit gate")[1]
+      ?.split("<!-- managed-by: opencode-path -->")[0];
     expect(exitGate).toBeDefined();
-    // Exit gate uses abbreviated forms in the Contract present condition
     const exitGateAbbrevs = [
       "target files/areas",
       "expected changes by area",
@@ -263,6 +267,55 @@ describe("template permission invariants", () => {
     for (const abbrev of exitGateAbbrevs) {
       expect(exitGate.toLowerCase()).toContain(abbrev);
     }
+  });
+
+  it("architect.md is a routing kernel with exclusive architecture playbooks", () => {
+    const content = readTemplate("architect");
+
+    expect(content).toContain("local-architecture");
+    expect(content).toContain("cross-repo-architecture");
+    expect(content).toContain("Mode: local | cross | local consuming cross contract");
+    expect(content).toContain("Playbook: local-architecture | cross-repo-architecture");
+    expect(content).toContain("Load **exactly one**");
+    expect(content).toMatch(/If the selected playbook is\s+missing or cannot be loaded, stop/);
+    expect(content).toContain("Optional domain skills may be loaded alongside");
+    expect(content).toContain("complexity or feature difficulty");
+    expect(content).toContain("file count");
+    expect(content).toContain("monorepo or multi-repo workspace layout");
+    expect(content).toContain("mere presence of other repositories");
+    expect(content).toContain("Local → cross");
+    expect(content).toContain("Apparent cross → local");
+    expect(content).toContain("A feature changes one repository and no external contract");
+    expect(content).toContain("A workspace contains many repositories but only one is affected");
+    expect(content).toContain("A BFF/frontend request or response contract changes");
+    expect(content).toContain("Local reconnaissance discovers a consumer that must change");
+
+    expect(content).toContain("| A feature changes one repository and no external contract | `local` |");
+    expect(content).toContain("| A workspace contains many repositories but only one is affected | `local` |");
+    expect(content).toContain("| A BFF/frontend request or response contract changes for a separately owned consumer | `cross` |");
+    expect(content).toContain("| Local reconnaissance discovers a consumer that must change | `cross` |");
+
+    // Mode-specific local planning belongs to local-architecture, not the kernel.
+    expect(content).not.toContain("## `brief.md` local schema");
+    expect(content).not.toContain("## Task table");
+    expect(content).not.toContain("## Local implementation-ready exit gate");
+  });
+
+  it("architect.md contains the complete common Mode 3 preflight", () => {
+    const content = readTemplate("architect");
+    const preflight = content.split("### Common Mode 3 preflight")[1]?.split("## Spec and cross-draft inputs")[0];
+    expect(preflight).toBeDefined();
+
+    expect(preflight).toContain("Run `pwd`");
+    expect(preflight).toMatch(/without shell command\s+substitution/);
+    expect(preflight).toContain("ls -d \"../{repo-name}-{slug}\"");
+    expect(preflight).toContain("git worktree list");
+    expect(preflight).toContain("git branch --list feature/{slug}");
+    expect(preflight).toContain("registered");
+    expect(preflight).toMatch(/Never overwrite, silently reuse, move, or auto-increment/);
+    expect(preflight).toMatch(/worktree path, work-folder path, branch, and\s+base/);
+    expect(preflight).toContain("Wait for explicit user approval");
+    expect(preflight).toContain("git worktree add");
   });
 
   // -----------------------------------------------------------------------

@@ -18,6 +18,8 @@ import {
   listActiveManagedModelAgents,
   detectManageableScopes,
   installCustomAgent,
+  planArchitectReconciliation,
+  applyArchitectReconciliation,
   deleteCustomAgent,
   hideBuiltinAgent,
   restoreBuiltinAgent,
@@ -36,6 +38,8 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { resolveTarget, type InstallTarget } from "./paths.js";
+import { readTemplate } from "./templates.js";
+import { parseFrontmatter, setModelInContent } from "./frontmatter.js";
 
 const FIXTURE_DIR = join(import.meta.dirname, "__fixtures__", "agents");
 
@@ -271,6 +275,149 @@ describe("addManagedMarker", () => {
     const result = addManagedMarker(content);
     const markerCount = result.split(MANAGED_MARKER).length - 1;
     expect(markerCount).toBe(1);
+  });
+});
+
+describe("Architect reconciliation", () => {
+  it("plans and applies a missing Architect as create", () => {
+    const target = fixtureTarget();
+    const plan = planArchitectReconciliation(target);
+
+    expect(plan?.name).toBe("architect");
+    expect(plan?.action).toBe("create");
+    expect(plan?.path).toBe(join(target.agentDir, "architect.md"));
+
+    expect(applyArchitectReconciliation(plan!, target)).toBe("create");
+    expect(readFileSync(plan!.path, "utf-8")).toContain(MANAGED_MARKER);
+  });
+
+  it("plans marked canonical Architect as unchanged", () => {
+    const target = fixtureTarget();
+    installCustomAgent("architect", target);
+
+    const plan = planArchitectReconciliation(target);
+    expect(plan?.action).toBe("unchanged");
+  });
+
+  it("updates marked drift while preserving the exact valid model", () => {
+    const target = fixtureTarget();
+    const content = addManagedMarker(
+      readTemplate("architect")
+        .replace("mode: primary", "mode: primary\nmodel: saved/provider-model")
+        .replace("You are Architect, a strategic design partner.", "Legacy Architect body.")
+    );
+    writeAgentFile(target.agentDir, "architect", content);
+
+    const plan = planArchitectReconciliation(target);
+    expect(plan?.action).toBe("update");
+    expect(plan?.expectedContent).toContain("model: saved/provider-model");
+    expect(applyArchitectReconciliation(plan!, target)).toBe("update");
+
+    const updated = readFileSync(plan!.path, "utf-8");
+    expect(updated).toContain("model: saved/provider-model");
+    expect(updated).not.toContain("Legacy Architect body.");
+  });
+
+  it.each(["provider/model #pinned", "provider/model:variant"])(
+    "revalidates and preserves a newer YAML-sensitive model before apply: %s",
+    (model) => {
+      const target = fixtureTarget();
+      const initial = addManagedMarker(
+        readTemplate("architect")
+          .replace("mode: primary", "mode: primary\nmodel: old/provider")
+          .replace("You are Architect, a strategic design partner.", "Legacy Architect body.")
+      );
+      writeAgentFile(target.agentDir, "architect", initial);
+
+      const plan = planArchitectReconciliation(target);
+      expect(plan?.action).toBe("update");
+
+      const changedDuringApproval = setModelInContent(initial, model);
+      writeAgentFile(target.agentDir, "architect", changedDuringApproval);
+
+      expect(applyArchitectReconciliation(plan!, target)).toBe("update");
+      const updated = readFileSync(plan!.path, "utf-8");
+      expect(parseFrontmatter(updated).frontmatter.model).toBe(model);
+      expect(updated).not.toContain("Legacy Architect body.");
+    }
+  );
+
+  it("returns unchanged without rewriting when Architect becomes canonical before apply", () => {
+    const target = fixtureTarget();
+    const initial = addManagedMarker(
+      readTemplate("architect").replace(
+        "You are Architect, a strategic design partner.",
+        "Legacy Architect body."
+      )
+    );
+    writeAgentFile(target.agentDir, "architect", initial);
+
+    const plan = planArchitectReconciliation(target);
+    expect(plan?.action).toBe("update");
+    writeAgentFile(target.agentDir, "architect", plan!.expectedContent!);
+    const canonical = readFileSync(plan!.path, "utf-8");
+
+    expect(applyArchitectReconciliation(plan!, target)).toBe("unchanged");
+    expect(readFileSync(plan!.path, "utf-8")).toBe(canonical);
+  });
+
+  it.each([
+    ["frontmatter becomes invalid", `---\nmodel: [broken\n---\n${MANAGED_MARKER}\n`],
+    ["managed marker is removed", readTemplate("architect").replace(MANAGED_MARKER, "")],
+  ])("preserves Architect when %s after planning", (_label, changedContent) => {
+    const target = fixtureTarget();
+    const initial = addManagedMarker(
+      readTemplate("architect").replace(
+        "You are Architect, a strategic design partner.",
+        "Legacy Architect body."
+      )
+    );
+    writeAgentFile(target.agentDir, "architect", initial);
+
+    const plan = planArchitectReconciliation(target);
+    expect(plan?.action).toBe("update");
+    writeAgentFile(target.agentDir, "architect", changedContent);
+    const beforeApply = readFileSync(plan!.path, "utf-8");
+
+    expect(applyArchitectReconciliation(plan!, target)).toBe("conflict");
+    expect(readFileSync(plan!.path, "utf-8")).toBe(beforeApply);
+  });
+
+  it("does not overwrite a file that appears during a create race", () => {
+    const target = fixtureTarget();
+    const plan = planArchitectReconciliation(target);
+    expect(plan?.action).toBe("create");
+
+    const manualFile = "# Manual Architect appeared during approval\n";
+    writeAgentFile(target.agentDir, "architect", manualFile);
+
+    expect(applyArchitectReconciliation(plan!, target)).toBe("conflict");
+    expect(readFileSync(plan!.path, "utf-8")).toBe(manualFile);
+  });
+
+  it("does not rewrite a compatible file that wins a create race", () => {
+    const target = fixtureTarget();
+    const plan = planArchitectReconciliation(target);
+    expect(plan?.action).toBe("create");
+    writeAgentFile(target.agentDir, "architect", plan!.expectedContent!);
+    const canonical = readFileSync(plan!.path, "utf-8");
+
+    expect(applyArchitectReconciliation(plan!, target)).toBe("unchanged");
+    expect(readFileSync(plan!.path, "utf-8")).toBe(canonical);
+  });
+
+  it.each([
+    ["unmarked file", "# Manual Architect\n"],
+    ["malformed frontmatter", `---\nmodel: [broken\n---\n${MANAGED_MARKER}\n`],
+    ["invalid model", addManagedMarker(readTemplate("architect").replace("mode: primary", "mode: primary\nmodel: \"\""))],
+  ])("preserves %s as conflict", (_label, content) => {
+    const target = fixtureTarget();
+    writeAgentFile(target.agentDir, "architect", content);
+
+    const plan = planArchitectReconciliation(target);
+    expect(plan?.action).toBe("conflict");
+    expect(() => applyArchitectReconciliation(plan!, target)).not.toThrow();
+    expect(readFileSync(plan!.path, "utf-8")).toBe(content);
   });
 });
 

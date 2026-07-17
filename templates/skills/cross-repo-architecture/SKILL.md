@@ -1,182 +1,278 @@
 ---
 name: cross-repo-architecture
-description: Use when a feature or task spans multiple Git repositories, services, packages, frontends, backends, or deployment units, or when an API/contract is shared across teams or repos. Defines the cross-repo handoff protocol Architect uses to produce a parent-level coordination brief plus one contract-bound draft per affected repo, and the boundary between shared (binding) decisions and repo-local decisions.
+description: Use after Architect selects cross mode to coordinate responsibilities, shared contracts, compatibility, and development ordering across independent repositories, services, or deployment units without producing a local implementation plan.
 ---
 
 # Cross-Repo Architecture
 
-This skill is loaded by Architect when a feature affects **multiple repositories, services, packages, frontends, backends, or deployment units**. It defines the cross-repo handoff protocol and separates decisions that Architect must own from decisions that repo-local Architect may decide independently.
+This playbook is loaded **only after Architect selects `cross` mode**. It
+produces a minimal coordination contract for independently owned or deployed
+implementation boundaries. It is not a local implementation plan, a Developer
+task list, or a post-commit operations plan.
+
+Do not load this playbook for a feature contained in one repository or one
+bounded implementation unit, even when the workspace contains several
+repositories. A local Architect consuming one repo draft loads
+`local-architecture` only; the draft is binding input, not a reason to rerun
+cross coordination.
 
 ## When to activate
 
-Architect must load this skill when the feature under design touches **any** of:
+Select cross mode and load this playbook only when at least one actual boundary
+requires coordination:
 
-- Multiple Git repositories
-- Multiple services (even in the same repo)
-- Multiple deployment units (e.g., separate backend, frontend, worker, CLI)
-- A contract or API consumed by another team/service
-- Shared data models, events, or auth that span boundaries
-- Rollout ordering that depends on multiple repos changing
+- independently owned Git repositories must change together;
+- separately deployed services, frontends, backends, workers, CLIs, or other
+  deployment units must change together;
+- a shared API, DTO, event, serialized payload, auth model, error format, or
+  compatibility guarantee consumed across a boundary changes;
+- development ordering is required so independently released units remain
+  compatible while the feature is introduced.
 
-If unsure, activate the skill. It is cheaper to activate and not need cross-repo output than to miss the coordination.
+The following are negative examples and remain local unless a real boundary or
+shared contract also changes:
 
-## Cross-mode output (parent-level handoff)
+- a multi-repo workspace where only one repository is affected;
+- a large or difficult feature with many files in one repository;
+- a monorepo with several packages owned and deployed as one implementation
+  boundary;
+- the mere presence of other repositories, directories, or packages.
 
-When Architect operates in **cross mode** (outside any single child repo, or in a parent coordination workspace), it produces a **parent-level coordination handoff** plus one **contract-bound draft** per affected repo.
+If bounded reconnaissance proves that no independent boundary or shared
+consumer changes, return to the Architect kernel, declare apparent-cross →
+local, and load `local-architecture`. Do not create empty repo drafts.
 
-### Work folder structure
+## Cross coordination output
 
+The cross artifact is a compatibility and responsibility contract. It records
+what boundaries must agree on and what each repo owns, while leaving internal
+implementation choices to a later local Architect.
+
+### Persistent shape
+
+A persistent cross handoff contains exactly:
+
+```text
+.path/work/{feature-slug}/
+  brief.md
+  repos/{repo}.md
 ```
-cross-handoff/
-  brief.md              — parent-level design: overall goal, shared contracts, rollout order
-  tasks.md              — coordination tasks: which repo changes what, in what order
-  progress.md           — cross-mode execution log
-  repos/{repo}.md       — one contract-bound draft per affected repo
-```
 
-### `brief.md` (cross-mode)
+Create one `repos/{repo}.md` draft for each affected implementation boundary.
+The cross work folder contains **no `tasks.md` and no `progress.md`**. It also
+contains no local acceptance criteria, Developer tasks, local checkpoints,
+local validation commands, evidence receipts, or post-commit operational
+artifacts.
 
-The cross `brief.md` owns the **shared architecture decisions** that apply across all repos:
+### Cross `brief.md`
 
-- **Shared contracts**: API surface, DTO shapes, event schemas, auth model, error format
-- **Rollout order**: which repo must change first, which can follow
-- **Compatibility rules**: what must not break during rollout, versioning strategy
-- **Repo responsibilities**: which repo owns which part of the feature
-- **Escalation contract**: how repo-local Architect escalates conflicts
-
-The cross `brief.md` is a **coordination artifact** that may live outside any single repo's Git history. It is the single source of truth for cross-repo decisions.
-
-### `repos/{repo}.md` — Contract-bound draft
-
-Each `repos/{repo}.md` is a **binding upstream contract** written for a specific repo. It contains:
+The parent brief must be self-contained and contain these coordination
+sections:
 
 ```markdown
-# Cross-Repo Contract: {repo-name}
+# Cross-Repo Coordination Brief: {feature-title}
 
-## Target repo
-- **Name**: {repository or service name}
-- **Path/URL**: {where this repo or service lives}
-- **Identity note**: {if repo directory name differs from service name}
-
-## Shared contracts (binding)
+## Objective
+## Participating repositories and responsibilities
+## Shared contracts
 ### API / interface contract
-- {endpoint, method, request/response shape, auth requirements}
-
 ### DTO / data contract
-- {schema, fields, validation rules, versioning}
-
-### Event contract (if applicable)
-- {event name, payload shape, publisher, consumers}
-
+### Event contract
 ### Auth / authorization contract
-- {who authenticates, token format, required scopes}
-
 ### Error contract
-- {error format, expected HTTP codes, retry behavior}
-
-## Compatibility constraints
-- {what behavior, API shape, or data format must not change}
-- {versioning or deprecation strategy}
-
-## Rollout ordering
-- {this repo changes before/after which other repo}
-- {feature flags needed for gradual rollout}
-
-## Local decision space (repo-local Architect owns these)
-- File layout, helpers, utilities, and internal module structure
-- Validation commands, test strategy within this repo
-- Task breakdown and implementation ordering within this repo
-- Local conventions (linting, formatting, naming) as long as contracts are met
-- Non-shared infrastructure (database migrations internal to this repo)
-
-## Prohibited local decisions (must NOT change)
-- Shared API surface, DTO shapes, field names, or types
-- Event schemas, topic names, or payload contracts
-- Auth model, token format, or required scopes
-- Error format, status codes, or retry contracts
-- Rollout ordering or inter-repo dependency timing
-- Compatibility guarantees or versioning strategy
-
-## Escalation rules
-If local constraints (stack, performance, existing architecture) prevent this repo from
-satisfying a binding contract, repo-local Architect must **block and escalate** back to
-the cross handoff. Do not silently relax, reinterpret, or partially implement the contract.
-
-Escalation format:
-- **Contract point**: {which shared contract is blocked}
-- **Local constraint**: {what prevents implementation}
-- **Evidence**: {measurement, existing code reference, architectural conflict}
-- **Suggested adaptation**: {what would work locally}
+## Compatibility matrix
+## Development ordering constraints
+## Repository drafts
+## Open cross decisions
+## Escalation
 ```
 
-### `tasks.md` (cross-mode)
+The sections may use an equivalent old/new compatibility table when that is
+clearer than a matrix. The brief must identify producers and consumers, old and
+new behavior, compatibility obligations during transition, and any ordering
+constraint necessary to keep independently developed changes compatible.
 
-Cross-mode `tasks.md` tracks coordination tasks, not implementation:
+#### Responsibilities
 
-- **T-C01**: Validate cross contracts are internally consistent
-- **T-C02**: Produce `repos/{repo}.md` for each affected repo
-- **T-C03**: Verify rollout ordering is feasible
-- **T-C04**: Confirm all shared contracts are covered by at least one repo draft
+State which repository, service, or deployment unit owns each cross-visible
+responsibility. Assign responsibility at the boundary level; do not dictate
+internal module layout, queries, tests, files, or migration mechanics.
 
-## Local-mode behavior (repo-local Architect)
+#### Shared contracts
 
-When Architect runs **inside a child repo** and a cross-repo draft (`repos/{repo}.md`) exists:
+Define only contracts that cross a boundary and are binding for affected repo
+drafts:
 
-### Consumption rules
+- API or interface endpoints, methods, request/response shapes, and auth
+  requirements;
+- DTO or serialized data fields, validation, versioning, and compatibility;
+- event names, payloads, publishers, consumers, delivery assumptions, and
+  idempotency where relevant;
+- authentication and authorization expectations, token shape, and scopes;
+- stable error shape, status/code semantics, and retry behavior.
 
-1. **Treat the cross draft as a binding upstream contract.** It is not negotiable at the local level.
-2. **Create a normal local handoff** (`brief.md`, `tasks.md`, `progress.md`) inside `.path/work/{feature-slug}/`.
-3. **Copy all binding contract constraints** from the cross draft into the local `brief.md` under `## Implementation Contract`. The cross handoff may not be in Git; the local handoff must be self-contained.
-4. **Own local decisions**: file layout, helpers, commands, task breakdown, validation steps, internal module structure, non-shared infrastructure.
-5. **Must not change shared decisions**: API surface, DTO shapes, event schemas, auth, error format, rollout ordering, compatibility guarantees.
-6. **Escalate conflicts**: if local constraints make the contract impossible, block and escalate. Do not adapt the contract silently.
+If a contract is not known, record it as an open cross decision or escalate;
+do not let a repo-local Architect invent it.
 
-### When cross draft is missing
+#### Compatibility and ordering
 
-If the user says the feature is cross-repo but only provides a parent `brief.md` without a matching `repos/{repo}.md`:
+Use a compatibility matrix or equivalent explicit old/new rules. State which
+old producers and consumers remain compatible with which new versions, whether
+additive or breaking changes require versioning or a staged adapter, and which
+development order is necessary.
 
-1. Ask the user for the relevant repo draft.
-2. If the local responsibility is ambiguous without the draft, **block** and do not produce a local handoff.
-3. Do not guess which parts of the parent brief apply to this repo.
+It is valid to state “producer changes after consumer support” or an equivalent
+development constraint. This playbook may define the constraint, but does not
+manage, deploy, prove, or collect evidence for the later rollout, migration,
+flag activation, scheduler activation, QA, or production operation.
 
-### Repo identity
+#### Open decisions and escalation
 
-Repo names in `repos/{repo}.md` may not match directory names exactly. The cross handoff must state the intended repo/service identity clearly. Local Architect should match by stated identity, not by directory name guesswork.
+Keep unresolved decisions that affect more than one boundary in `## Open cross
+decisions`. Do not hide them in repo drafts. If a shared contract is ambiguous,
+contradictory, or impossible, block and use the escalation format below rather
+than weakening it locally.
 
-## Cross-mode escalation (repo-local → cross)
+### `repos/{repo}.md` draft
 
-When repo-local Architect escalates a contract conflict:
+Create exactly one draft for every affected repository or implementation
+boundary. Match a draft by its stated identity, not by an assumed directory
+name. Each draft must contain:
 
-1. Repo-local Architect records the block in `progress.md` with the escalation format above.
-2. Cross Architect (or the user) reviews the escalation and decides:
-   - Adapt the shared contract (update cross `brief.md` and affected `repos/{repo}.md`)
-   - Accept the local constraint as-is and adjust scope
-   - Reject the escalation and require the repo to adapt
-3. Any material decision that changes the contract must be persisted in `brief.md` and/or `tasks.md`. Decisions only in `progress.md` do not count.
+```markdown
+# Cross-Repo Draft: {repo-name}
 
-## Edge cases
+## Target identity
+## Assigned responsibility
+## Binding shared contracts
+### API / interface contract
+### DTO / data contract
+### Event contract
+### Auth / authorization contract
+### Error contract
+## Compatibility obligations
+## Development ordering constraints
+## Local decision space
+## Prohibited local decisions
+## Escalation
+```
 
-- **Feature starts single-repo, becomes cross-repo**: Architect discovers another repo/service must change. Switch to cross mode before finalizing the implementation handoff. Produce `repos/{repo}.md` drafts for all affected repos.
-- **Cross handoff lives outside Git and disappears**: Each local `brief.md` must copy shared constraints so the contract survives. Local handoffs must be self-contained.
-- **Local repo cannot implement due to real constraints**: Block and escalate. Do not weaken the contract silently.
-- **Repo names differ from directory names**: Match by stated identity in the cross draft, not by filesystem guesswork.
-- **Multiple repos in the same monorepo**: Still produce separate `repos/{repo}.md` per service boundary. Don't assume they share a stack or commands just because they share a repo.
+The draft is a binding input for a later Architect session in that repository.
+It must include:
+
+- target repository/service identity, path or URL, and identity notes when the
+  directory name differs;
+- responsibility assigned to this boundary;
+- the code-affecting shared contracts this boundary must satisfy;
+- compatibility obligations and old/new behavior it must preserve;
+- development-order constraints that affect implementation sequencing;
+- the decisions the local Architect may make;
+- decisions the local Architect must not change; and
+- the escalation format for an impossible or contradictory contract.
+
+## Local decision space
+
+Unless changing one of the shared contracts above, these remain the local
+Architect's decisions inside each repository:
+
+- internal data access and query design;
+- module, package, and file layout;
+- helpers, algorithms, and internal interfaces;
+- tests and verification strategy internal to that repository;
+- migrations internal to that repository;
+- local configuration and non-shared infrastructure;
+- task breakdown and implementation ordering within the repository.
+
+The cross brief must not prescribe these details. The local Architect later
+converts only repo-controlled implementation behavior into local acceptance
+criteria, tasks, checkpoints, and validation. Coordination context stays in the
+cross artifact and is not copied indiscriminately into a local contract.
+
+## Explicit cross exclusions
+
+Cross artifacts must not contain or own:
+
+- local acceptance criteria;
+- Developer implementation tasks;
+- checkpoints or local progress logs;
+- repository validation commands, evidence receipts, or post-commit proof;
+- QA or production deployment management;
+- operational migration execution or runtime migration evidence;
+- feature-flag or runtime activation;
+- scheduler activation;
+- deployed smoke requirements or release approval.
+
+Compatibility-preserving development order may be stated as a constraint. The
+cross Architect does not manage or prove the later deployment or operations.
+
+## Escalation contract
+
+When a repo-local Architect finds that a binding cross contract cannot be met,
+the issue must be escalated without silently relaxing or reinterpreting the
+contract:
+
+```markdown
+## Escalation to cross architecture
+
+### Target repository / boundary
+<affected identity>
+
+### Contract point
+<shared API, DTO, event, auth, error, or compatibility rule>
+
+### Local constraint
+<what prevents implementation>
+
+### Evidence
+<source path, measurement, existing behavior, or error>
+
+### Impact
+<blocked responsibility or compatibility consequence>
+
+### Proposed options
+<at least one concrete adaptation with tradeoffs>
+
+### Status
+blocked awaiting cross architecture decision
+```
+
+Material resolutions must be persisted in the cross `brief.md` and all
+affected repo drafts. A decision only in chat or a local progress log is not a
+binding cross decision.
+
+## Safe transition from local mode
+
+If local reconnaissance discovers a consumer, independent owner, deployment
+unit, or shared contract that must change, stop before persisting the local
+`brief.md`, `tasks.md`, or `progress.md`. Declare `Mode: cross`, explain the
+new boundary, load this playbook, and create a fresh cross artifact with one
+draft per affected boundary. Never mix local and cross schemas.
+
+## Dedicated worktree transport
+
+When a cross coordination handoff uses a dedicated worktree, use the Architect
+kernel's complete common Mode 3 preflight. Check the sibling directory,
+registered worktrees, and `feature/{slug}` branch; stop on any collision without
+overwrite, silent reuse, or auto-increment; show worktree path, work-folder
+path, branch, and base together; and wait for explicit approval before creation.
+This playbook does not replace or weaken that preflight. The resulting cross
+artifacts remain only `brief.md` plus `repos/{repo}.md` drafts.
 
 ## Graphify in cross-repo work
 
-Graphify graphs and `.path/graphify-state.json` freshness metadata are **per repository**. In cross-repo exploration:
-
-- Explorer may use each repo's graph/state independently as an optional navigation aid for understanding structure, dependencies, and likely impact areas within a single repo.
-- Do **not** combine graph output from multiple repos into a shared graph, a unified representation, or a cross-repo contract source.
-- Shared API surfaces, DTO shapes, event schemas, auth models, error formats, and rollout ordering must **still be verified from source files and explicit contracts** (see `## Shared contracts (binding)`), not inferred from Graphify output alone.
-- If a repo's graph is stale or missing, Explorer falls back to normal source exploration within that repo. Graph freshness does not block cross-repo architecture decisions.
+Graphify graphs and `.path/graphify-state.json` freshness metadata remain per
+repository. They may help navigate each repository, but shared API surfaces,
+DTOs, event schemas, auth, errors, and ordering must be verified from source
+files and explicit contracts, never inferred from graph output alone. A stale
+or missing graph does not block cross architecture.
 
 ## Do not introduce
 
-- Do not create a separate `cross-architect` agent. This skill is loaded by Architect.
-- Do not give Architect broad child-repo write permissions by default.
-- Do not turn a parent workspace into a monorepo.
-- Do not assume all repos share stack, commands, or architecture.
-- Do not make repo-local Architect redesign shared contracts.
+- Do not create a separate `cross-architect` or `cross-auditor` agent.
+- Do not give Architect broad child-repository write permissions.
+- Do not turn a parent workspace into a monorepo or assume repos share a stack.
+- Do not redesign shared contracts from a repo-local handoff.
+- Do not add cross `tasks.md`, `progress.md`, local ACs, checkpoints, runtime
+  enforcement, plugins, hooks, dependencies, or post-commit operations.
 
 <!-- managed-by: opencode-path -->

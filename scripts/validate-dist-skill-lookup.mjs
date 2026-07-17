@@ -55,6 +55,7 @@ console.log("templates/skills/ exists ✓");
 // ── 4. Verify all managed skill templates ───────────────────────────────────
 
 const managedSkills = [
+  "local-architecture",
   "cross-repo-architecture",
   "migration-and-data-change",
   "api-contracts",

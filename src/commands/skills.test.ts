@@ -26,7 +26,10 @@ import {
   _resetSigintStateForTest,
 } from "../lib/ui.js";
 import { installManagedSkill } from "../lib/skills.js";
+import { CORE_SKILLS } from "../lib/paths.js";
 import { MANAGED_MARKER } from "../lib/agents.js";
+
+const CORE_SKILL_NAMES = [...CORE_SKILLS];
 
 function setupProjectFixture(opts?: {
   activeSkills?: string[];
@@ -185,7 +188,7 @@ describe("skillsCommand", () => {
 
   it("does not remove core skills even if unchecked", async () => {
     const root = chdirToFixture({
-      activeSkills: ["cross-repo-architecture"],
+      activeSkills: CORE_SKILL_NAMES,
     });
 
     // Core skills are not shown in checkbox; user selects nothing
@@ -196,12 +199,12 @@ describe("skillsCommand", () => {
 
     await skillsCommand({ project: true });
 
-    // Core skill still exists (unmodified)
-    const skillPath = join(
-      root, ".opencode", "skills", "cross-repo-architecture", "SKILL.md"
-    );
-    expect(existsSync(skillPath)).toBe(true);
-    expect(readFileSync(skillPath, "utf-8")).toContain("<!-- managed-by: opencode-path -->");
+    // Both core skills still exist (unmodified)
+    for (const skillName of CORE_SKILL_NAMES) {
+      const skillPath = join(root, ".opencode", "skills", skillName, "SKILL.md");
+      expect(existsSync(skillPath)).toBe(true);
+      expect(readFileSync(skillPath, "utf-8")).toContain("<!-- managed-by: opencode-path -->");
+    }
 
     logSpy.mockRestore();
     errorSpy.mockRestore();
