@@ -1377,6 +1377,47 @@
 #### Do Not Touch
 - Do not modify product files, rewrite historical workflow records, force-push, or discard either local or remote commits.
 
+### 2026-07-16 — Developer — Push blocked by repository rule
+
+#### Current Task
+- Post-merge push diagnosis for `580f98b` and `dbfe62c`.
+
+#### Current Status
+- Push to `origin/main` was rejected by GitHub repository rules. The remote explicitly requires changes to be made through a pull request.
+
+#### What Was Attempted
+- User ran `git push -u origin main` after the successful merge and recovery-log commit.
+- Collected read-only branch, status, commit, remote, and diff evidence.
+
+#### What Changed
+- No product files or commits were changed by the rejected push.
+- Working tree was clean before this incident entry; the progress log is now the only uncommitted file.
+
+#### Files Touched
+- No files changed during diagnosis.
+
+#### What Remains
+- Create or use a feature branch containing the three local commits, push that branch, and open a pull request into `main`.
+- Do not retry direct pushes to `main`; the repository rule will reject them.
+
+#### Validation Run
+- Push output: `GH013: Repository rule violations found for refs/heads/main` and `Changes must be made through a pull request.`
+- `git status -sb` — `main...origin/main [ahead 3]`; working tree clean.
+- Local commits ahead of `origin/main`: `dbfe62c`, `580f98b`, `48c76b1`.
+- No merge conflict or rebase state is present.
+
+#### Validation Missing
+- Feature-branch push and pull-request checks remain pending.
+
+#### Decisions Made
+- Do not bypass the repository rule with force-push or another direct main push.
+
+#### Notes for Next Session
+- Safest path: create a branch at current `HEAD`, push it with upstream tracking, then open a PR targeting `main`.
+
+#### Do Not Touch
+- Do not force-push, modify product files, discard commits, or change repository rules without explicit authorization.
+
 ### 2026-07-16 — Developer — Merge completed; push ready
 
 #### Current Task
