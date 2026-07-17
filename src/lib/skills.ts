@@ -31,6 +31,22 @@ import {
 /** HTML comment marker injected into installed managed skill files. */
 export const MANAGED_SKILL_MARKER = "<!-- managed-by: opencode-path -->";
 
+/** Reconciliation action for a managed architecture core skill. */
+export type CoreSkillReconciliationAction =
+  | "create"
+  | "update"
+  | "unchanged"
+  | "conflict";
+
+/** Planned canonical reconciliation for an architecture core skill. */
+export interface CoreSkillReconciliation {
+  name: CoreSkillName;
+  path: string;
+  action: CoreSkillReconciliationAction;
+  expectedContent?: string;
+  reason?: string;
+}
+
 /** Base name for skill definition files. */
 const SKILL_FILE = "SKILL.md";
 
@@ -185,6 +201,81 @@ export function addSkillMarker(content: string): string {
   if (contentHasSkillMarker(content)) return content;
   const trimmed = content.endsWith("\n") ? content : content + "\n";
   return trimmed + MANAGED_SKILL_MARKER + "\n";
+}
+
+function canonicalCoreSkillContent(skillName: CoreSkillName): string {
+  return addSkillMarker(readSkillTemplate(skillName));
+}
+
+/** Compare one architecture core skill with its packaged canonical content. */
+export function planCoreSkillReconciliation(
+  skillName: CoreSkillName,
+  target: InstallTarget
+): CoreSkillReconciliation {
+  const filePath = getSkillInstallPath(skillName, target);
+  if (!existsSync(filePath)) {
+    return {
+      name: skillName,
+      path: filePath,
+      action: "create",
+      expectedContent: canonicalCoreSkillContent(skillName),
+    };
+  }
+
+  if (!fileHasSkillMarker(filePath)) {
+    return {
+      name: skillName,
+      path: filePath,
+      action: "conflict",
+      reason: "file has no managed marker",
+    };
+  }
+
+  try {
+    const installedContent = readFileSync(filePath, "utf-8");
+    const expectedContent = canonicalCoreSkillContent(skillName);
+    return {
+      name: skillName,
+      path: filePath,
+      action: installedContent === expectedContent ? "unchanged" : "update",
+      expectedContent,
+    };
+  } catch (error) {
+    return {
+      name: skillName,
+      path: filePath,
+      action: "conflict",
+      reason: `cannot read file: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+/** Apply a previously approved architecture core-skill reconciliation. */
+export function applyCoreSkillReconciliation(
+  reconciliation: CoreSkillReconciliation,
+  target: InstallTarget
+): CoreSkillReconciliationAction {
+  if (reconciliation.action === "unchanged" || reconciliation.action === "conflict") {
+    return reconciliation.action;
+  }
+
+  const expectedContent = reconciliation.expectedContent;
+  if (!expectedContent) {
+    throw new Error(`Missing canonical skill content for ${reconciliation.path}`);
+  }
+
+  if (existsSync(reconciliation.path)) {
+    const current = readFileSync(reconciliation.path, "utf-8");
+    if (!contentHasSkillMarker(current)) return "conflict";
+    if (reconciliation.action === "create" && current === expectedContent) {
+      return "create";
+    }
+  }
+
+  const dir = dirname(reconciliation.path);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(reconciliation.path, expectedContent, "utf-8");
+  return reconciliation.action;
 }
 
 // ---------------------------------------------------------------------------

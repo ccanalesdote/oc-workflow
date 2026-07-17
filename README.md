@@ -74,7 +74,7 @@ opencode-path init
 opencode-path init --global
 ```
 
-`init` walks you through scope selection, agent installation, stack profiles, and model configuration in one guided flow. Restart opencode after any change.
+`init` walks you through scope selection, agent installation, stack profiles, and model configuration in one guided flow. It also reconciles the managed Architect and both architecture core skills. Restart opencode only when init reports that an architecture definition (or another managed definition) changed.
 
 ## Commands
 
@@ -99,18 +99,21 @@ opencode-path init [options]
 
 1. Validates all template frontmatter. If any template is malformed, prints the file(s) and exits `1` without prompting.
 2. Resolves scope (project or global). If `--global` or `--project` is passed, uses that scope. Otherwise prompts interactively.
-3. Scans current agent state and displays conflict warnings (files without the managed marker).
-4. **Agents step** — checkbox multi-select over all managed agents. Active agents are pre-selected. Exposes a visible "Skip for now" option and a "← Cancel" option.
-5. **Profiles step** — checkbox multi-select over available stack profiles plus "All stacks". Only shown if patchable agents (`developer`, `reviewer`, `auditor`) will be active. Exposes "Skip for now" and "← Cancel".
-6. **Models step** — iterates active agents, prompting once per agent with model options from `opencode models` (if available) plus "Custom model..." and "Skip for now". Shown with a spinner while loading models. Choosing "Custom model..." opens a free-text input; cancel it with Ctrl+C.
-7. Displays a consolidated summary of all planned changes (agents, profiles, models).
-8. If no changes are planned, prints `No changes needed.` and exits `0`.
-9. Asks for final confirmation (skipped by `--yes` or `--dry-run`).
-10. Applies all changes and prints results.
+3. Scans current agent/skill state and displays conflict warnings (files without the managed marker).
+4. Reconciles the managed architecture bundle in the same aggregate plan: an active Architect and both core architecture skills are retained and compared with packaged definitions; a missing Architect is created only when selected through the existing agent flow; missing core skills remain desired.
+5. **Agents step** — checkbox multi-select over all managed agents. Active agents are pre-selected. Exposes a visible "Skip for now" option and a "← Cancel" option.
+6. **Profiles step** — checkbox multi-select over available stack profiles plus "All stacks". Only shown if patchable agents (`developer`, `reviewer`, `auditor`) will be active. Exposes "Skip for now" and "← Cancel".
+7. **Models step** — iterates active agents, prompting once per agent with model options from `opencode models` (if available) plus "Custom model..." and "Skip for now". Shown with a spinner while loading models. Choosing "Custom model..." opens a free-text input; cancel it with Ctrl+C.
+8. Displays a consolidated summary of all planned changes, including architecture paths/actions and warnings before marked drift is replaced. Only a valid non-empty Architect `model:` value is preserved; other marked architecture drift is replaceable after approval.
+9. If no changes are planned, prints `No changes needed.` and exits `0` without claiming a restart.
+10. Asks for the existing single final confirmation (skipped by `--yes` or `--dry-run`).
+11. Applies eligible architecture creates/updates and the other selected changes, then prints per-file architecture results and counts.
 
-**Re-running `init`** is idempotent. Already-active agents are shown as selected and cannot be deselected. If nothing needs to change, it prints `No changes needed.` and exits `0`.
+**Re-running `init`** is idempotent. Already-active agents are shown as selected and cannot be deselected. Once the packaged architecture definitions are installed, a repeated run reports them as `Unchanged` and performs no architecture writes.
 
-**`--dry-run`** runs the entire selection flow, shows the consolidated summary, and exits `0` without writing any files.
+**`--dry-run`** runs the entire selection flow, shows the consolidated summary and architecture warnings, and exits `0` without writing any files. This remains true when combined with `--yes`; dry-run takes precedence and no restart is required.
+
+When `--yes` is used, the plan and marked-overwrite warning remain visible and the existing final prompt is skipped. It authorizes eligible architecture creates/updates as well as the other selected changes. Unmarked conflicts are always reported as `Skipped conflict` and preserved.
 
 **Optional Graphify integration:** `init` will offer to install [Graphify](https://github.com/ggcaponetto/graphify) as an optional aid for repository exploration. It defaults to no and is not installed unless you accept the prompt. Pass `--with-graphify` to accept without the prompt. `--yes` alone does **not** accept Graphify. The integration installs the official Graphify CLI (via `uv tool install graphifyy`), the official OpenCode skill, and a managed `graphify-explorer` skill for the Explorer agent. Failure of any Graphify step does **not** abort the overall `opencode-path` installation. Graphify hooks and automatic graph refresh are intentionally **not** installed.
 
@@ -397,7 +400,7 @@ If the `opencode models` command runs but returns no output, the models command 
 
 ### Restart reminder
 
-After running `init`, `agents`, `models`, `profiles`, or `uninstall`, you must **restart opencode** for changes to take effect. Each command prints:
+When a command changes managed definitions, you must **restart opencode** for changes to take effect. `init` prints the reminder only after a successful create/update (including partial success); no-op, rejection, dry-run, and conflicts-only runs explicitly state that no architecture restart is required. Each restart-requiring command prints:
 
 ```
 ⚠️  Restart opencode to apply changes.

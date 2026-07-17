@@ -12,6 +12,15 @@ export interface ParsedFrontmatter {
   body: string;
 }
 
+/**
+ * Return whether a frontmatter model value is supported mutable state.
+ * Models must be non-empty strings; whitespace-only and non-string values are
+ * invalid for managed Architect reconciliation.
+ */
+export function isValidAgentModel(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
 const FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/;
 
 /**
@@ -171,7 +180,7 @@ export function setModelInContent(content: string, model: string): string {
     // Replace the existing model line, preserving leading indentation
     const existingLine = yamlLines[modelLineIndex];
     const indent = existingLine.match(/^(\s*)/)?.[1] ?? "";
-    yamlLines[modelLineIndex] = `${indent}model: ${model}`;
+    yamlLines[modelLineIndex] = `${indent}model: ${serializeYamlScalar(model)}`;
   } else {
     // Insert model: after the `mode:` line (or `description:` if no mode:)
     let insertAfter = -1;
@@ -206,9 +215,28 @@ export function setModelInContent(content: string, model: string): string {
     }
 
     // Insert after the found line
-    yamlLines.splice(insertAfter + 1, 0, `model: ${model}`);
+    yamlLines.splice(insertAfter + 1, 0, `model: ${serializeYamlScalar(model)}`);
   }
 
   const newFrontmatter = yamlLines.join("\n");
   return `---\n${newFrontmatter}\n---\n${body}`;
+}
+
+/**
+ * Serialize a model as a YAML scalar without changing its string value when
+ * the frontmatter is parsed again. YAML.stringify keeps ordinary model IDs
+ * readable while quoting values whose syntax could otherwise be interpreted
+ * as a comment, indicator, boolean, or another YAML type. Multiline values
+ * use JSON's double-quoted scalar form so insertion remains one frontmatter
+ * line and the accepted model grammar is not narrowed.
+ */
+function serializeYamlScalar(value: string): string {
+  if (value.includes("\n") || value.includes("\r")) {
+    return JSON.stringify(value);
+  }
+
+  return YAML.stringify(value, {
+    lineWidth: 0,
+    singleQuote: false,
+  }).trimEnd();
 }

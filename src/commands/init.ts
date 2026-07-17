@@ -4,7 +4,7 @@ import {
   resolveTarget,
   type InstallScope,
   type InstallTarget,
-  isCoreSkill,
+  CORE_SKILLS,
 } from "../lib/paths.js";
 import { createOrMergeConfig } from "../lib/config.js";
 import {
@@ -16,6 +16,9 @@ import {
   applyAgentChanges,
   type ManagedAgentStatus,
   type AgentChanges,
+  planArchitectReconciliation,
+  applyArchitectReconciliation,
+  type ArchitectReconciliation,
 } from "../lib/agents.js";
 import {
   PROFILES,
@@ -34,11 +37,13 @@ import {
 } from "../lib/opencode-models.js";
 import { validateAllTemplates } from "../lib/templates.js";
 import {
-  installCoreSkill,
   installManagedSkill,
   listManagedSkillStatuses,
   validateAllSkillTemplates,
   getSkillState,
+  planCoreSkillReconciliation,
+  applyCoreSkillReconciliation,
+  type CoreSkillReconciliation,
   type ManagedSkillStatus,
 } from "../lib/skills.js";
 import {
@@ -112,6 +117,7 @@ interface InitPlan {
   selectedOptionalSkills: ManagedSkillStatus[];
   graphifyAccepted: boolean;
   graphifyConflict: boolean;
+  architectureReconciliations: (ArchitectReconciliation | CoreSkillReconciliation)[];
 }
 
 interface InitApplyResult {
@@ -134,6 +140,13 @@ interface InitApplyResult {
     installed: string[];
     unchanged: string[];
     conflicts: string[];
+  };
+  architectureResult: {
+    created: { name: string; path: string }[];
+    updated: { name: string; path: string }[];
+    unchanged: { name: string; path: string }[];
+    conflicts: { name: string; path: string; reason?: string }[];
+    failed: { name: string; path: string; error: string }[];
   };
   optionalSkillResult: {
     installed: string[];
@@ -328,6 +341,30 @@ function buildConsolidatedSummary(
     });
   }
 
+  // Architecture bundle reconciliation. Every desired target is shown with
+  // its path and action inside the existing aggregate approval plan.
+  for (const entry of plan.architectureReconciliations) {
+    const actionLabel = entry.action === "conflict"
+      ? "Skipped conflict"
+      : entry.action[0].toUpperCase() + entry.action.slice(1);
+    lines.push({
+      label: "Architecture:",
+      value: `${actionLabel} ${entry.name} — ${entry.path}${entry.reason ? ` (${entry.reason})` : ""}`,
+      color: entry.action === "conflict"
+        ? "red"
+        : entry.action === "unchanged"
+          ? "dim"
+          : "green",
+    });
+  }
+  if (plan.architectureReconciliations.some((entry) => entry.action === "update")) {
+    lines.push({
+      label: "Architecture warning:",
+      value: "Marked architecture edits will be replaced; only a valid Architect model is preserved.",
+      color: "yellow",
+    });
+  }
+
   // Profile changes
   if (plan.selectedProfiles.length > 0) {
     const profileLabels = plan.selectedProfiles.map(
@@ -452,14 +489,23 @@ function hasPlannedChanges(plan: InitPlan): boolean {
     (s) => s.state === "missing"
   );
 
+  const hasArchitectureChanges = plan.architectureReconciliations.some(
+    (entry) => entry.action === "create" || entry.action === "update"
+  );
+
   return (
     hasAgentChanges ||
     hasSkillChanges ||
     hasOptionalSkillChanges ||
+    hasArchitectureChanges ||
     plan.selectedProfiles.length > 0 ||
     plan.modelAssignments.length > 0 ||
     plan.graphifyAccepted
   );
+}
+
+function printArchitectureUnchanged(): void {
+  console.log("\n   Architecture definitions were not changed; no restart is required.\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -475,6 +521,13 @@ async function applyPlan(
     profileResult: { applied: [], skipped: [], failed: [] },
     modelResult: { configured: [], failed: [] },
     skillResult: { installed: [], unchanged: [], conflicts: [] },
+    architectureResult: {
+      created: [],
+      updated: [],
+      unchanged: [],
+      conflicts: [],
+      failed: [],
+    },
     optionalSkillResult: { installed: [], unchanged: [], conflicts: [] },
     graphifyResult: {
       cliInstalled: false,
@@ -507,28 +560,39 @@ async function applyPlan(
     };
   }
 
-  // 2. Install core skills (always, no user prompt)
+  // 2. Reconcile only Architect and the two architecture core skills. This
+  // replaces the old missing-only core-skill install loop; optional skills and
+  // Graphify continue through their existing paths below.
   await applyPhaseCheckpoint();
-  for (const skill of plan.skillStatuses) {
+  for (const entry of plan.architectureReconciliations) {
     await applyPhaseCheckpoint();
-    if (skill.state === "missing") {
-      try {
-        if (!isCoreSkill(skill.name)) continue;
-        const installResult = installCoreSkill(skill.name, plan.target);
-        if (installResult === "created") {
-          result.skillResult.installed.push(skill.name);
-        } else if (installResult === "conflict") {
-          result.skillResult.conflicts.push(skill.name);
-        } else {
-          result.skillResult.unchanged.push(skill.name);
-        }
-      } catch {
-        result.skillResult.conflicts.push(skill.name);
+    try {
+      const applied = entry.name === "architect"
+        ? applyArchitectReconciliation(entry as ArchitectReconciliation, plan.target)
+        : applyCoreSkillReconciliation(entry as CoreSkillReconciliation, plan.target);
+
+      if (applied === "create") {
+        result.architectureResult.created.push({ name: entry.name, path: entry.path });
+        if (entry.name !== "architect") result.skillResult.installed.push(entry.name);
+      } else if (applied === "update") {
+        result.architectureResult.updated.push({ name: entry.name, path: entry.path });
+      } else if (applied === "unchanged") {
+        result.architectureResult.unchanged.push({ name: entry.name, path: entry.path });
+        if (entry.name !== "architect") result.skillResult.unchanged.push(entry.name);
+      } else {
+        result.architectureResult.conflicts.push({
+          name: entry.name,
+          path: entry.path,
+          reason: entry.reason ?? "file changed or lacks the managed marker",
+        });
+        if (entry.name !== "architect") result.skillResult.conflicts.push(entry.name);
       }
-    } else if (skill.state === "active") {
-      result.skillResult.unchanged.push(skill.name);
-    } else if (skill.state === "conflict") {
-      result.skillResult.conflicts.push(skill.name);
+    } catch (error) {
+      result.architectureResult.failed.push({
+        name: entry.name,
+        path: entry.path,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -788,6 +852,7 @@ export async function initCommand(
     selectedOptionalSkills: [],
     graphifyAccepted: false,
     graphifyConflict: false,
+    architectureReconciliations: [],
   };
 
   // Step 3: Agent selection (AC-03, AC-06, AC-07)
@@ -842,6 +907,18 @@ export async function initCommand(
 
     plan.agentChanges = computeAgentChanges(statuses, selectedSet);
   }
+
+  // Active Architect is always retained/reconciled. A missing Architect is
+  // desired only when the existing agent-selection flow selected it. Both
+  // architecture core skills are mandatory desired targets on every init.
+  const architectStatus = statuses.find((status) => status.name === "architect");
+  const architectDesired = architectStatus?.state === "active" ||
+    (plan.agentChanges?.toInstall.includes("architect") ?? false);
+  const architectReconciliation = planArchitectReconciliation(target, architectDesired);
+  plan.architectureReconciliations = [
+    ...(architectReconciliation ? [architectReconciliation] : []),
+    ...CORE_SKILLS.map((skillName) => planCoreSkillReconciliation(skillName, target)),
+  ];
 
   // Step 3b: Optional skill selection (AC-03, AC-04)
   // Core skills are auto-installed; optional skills are unchecked by default.
@@ -1006,10 +1083,13 @@ export async function initCommand(
   // Determine which agents are active for model config
   const activeModelAgents = statuses.filter(
     (s) =>
-      s.state === "active" ||
-      (plan.agentChanges &&
-        (plan.agentChanges.toInstall.includes(s.name) ||
-          plan.agentChanges.toRestore.includes(s.name)))
+      (s.state === "active" ||
+        (plan.agentChanges &&
+          (plan.agentChanges.toInstall.includes(s.name) ||
+            plan.agentChanges.toRestore.includes(s.name)))) &&
+      !(s.name === "architect" && plan.architectureReconciliations.some(
+        (entry) => entry.name === "architect" && entry.action === "conflict"
+      ))
   );
 
   const SKIP_MODELS_VALUE = "__skip_models__";
@@ -1109,12 +1189,39 @@ export async function initCommand(
   // Check for no changes (AC-09)
   if (!hasPlannedChanges(plan)) {
     printNoChanges();
+    const unchangedArchitecture = plan.architectureReconciliations.filter(
+      (entry) => entry.action === "unchanged"
+    );
+    const conflictArchitecture = plan.architectureReconciliations.filter(
+      (entry) => entry.action === "conflict"
+    );
+    if (unchangedArchitecture.length > 0 || conflictArchitecture.length > 0) {
+      const noOpArchitectureLines: SummaryLine[] = [
+        ...unchangedArchitecture.map((entry) => ({
+          label: "Unchanged:",
+          value: `${entry.name} — ${entry.path}`,
+          color: "dim" as const,
+        })),
+        ...conflictArchitecture.map((entry) => ({
+          label: "Skipped conflict:",
+          value: `${entry.name} — ${entry.path}${entry.reason ? ` (${entry.reason})` : ""}`,
+          color: "red" as const,
+        })),
+      ];
+      printSummary(noOpArchitectureLines);
+      console.log(
+        `   Architecture summary: 0 created, 0 updated, ${unchangedArchitecture.length} unchanged, ` +
+        `${conflictArchitecture.length} skipped conflict, 0 failed.`
+      );
+    }
+    printArchitectureUnchanged();
     return;
   }
 
   // Step 7: Final confirm/apply (AC-08, AC-13, AC-39)
   if (options.dryRun) {
     console.log(`\n   ${messages.DRY_RUN_LABEL} No files were modified.\n`);
+    printArchitectureUnchanged();
     return;
   }
 
@@ -1125,6 +1232,7 @@ export async function initCommand(
 
     if (!proceed) {
       printCancelled();
+      printArchitectureUnchanged();
       return;
     }
   }
@@ -1280,6 +1388,46 @@ export async function initCommand(
     });
   }
 
+  // Architecture results are reported per file, including unchanged and
+  // preserved conflicts, followed by aggregate counts.
+  for (const item of applyResult.architectureResult.created) {
+    resultLines.push({ label: "Created:", value: `${item.name} — ${item.path}`, color: "green" });
+  }
+  for (const item of applyResult.architectureResult.updated) {
+    resultLines.push({ label: "Updated:", value: `${item.name} — ${item.path}`, color: "green" });
+  }
+  for (const item of applyResult.architectureResult.unchanged) {
+    resultLines.push({ label: "Unchanged:", value: `${item.name} — ${item.path}`, color: "dim" });
+  }
+  for (const item of applyResult.architectureResult.conflicts) {
+    resultLines.push({
+      label: "Skipped conflict:",
+      value: `${item.name} — ${item.path}${item.reason ? ` (${item.reason})` : ""}`,
+      color: "red",
+    });
+  }
+  for (const item of applyResult.architectureResult.failed) {
+    resultLines.push({
+      label: "Failed:",
+      value: `${item.name} — ${item.path} (${item.error})`,
+      color: "red",
+    });
+  }
+  if (applyResult.architectureResult.created.length > 0 ||
+      applyResult.architectureResult.updated.length > 0 ||
+      applyResult.architectureResult.unchanged.length > 0 ||
+      applyResult.architectureResult.conflicts.length > 0 ||
+      applyResult.architectureResult.failed.length > 0) {
+    const ar = applyResult.architectureResult;
+    resultLines.push({
+      label: "Architecture summary:",
+      value: `${ar.created.length} created, ${ar.updated.length} updated, ` +
+        `${ar.unchanged.length} unchanged, ${ar.conflicts.length} skipped conflict, ` +
+        `${ar.failed.length} failed.`,
+      color: ar.failed.length > 0 || ar.conflicts.length > 0 ? "yellow" : "dim",
+    });
+  }
+
   if (resultLines.length > 0) {
     printSummary(resultLines);
   }
@@ -1304,9 +1452,31 @@ export async function initCommand(
     );
   }
 
+  if (applyResult.architectureResult.failed.length > 0) {
+    printWarning(
+      "Architecture reconciliation partially failed. Completed paths are listed above; " +
+      "re-run init to retry failed paths."
+    );
+  }
+
   printPaths(target);
   printNextStep(messages.NEXT_STEP_MODELS);
-  printRestartWarning();
+  const wroteArchitecture =
+    applyResult.architectureResult.created.length > 0 ||
+    applyResult.architectureResult.updated.length > 0;
+  const wroteOtherChanges =
+    applyResult.agentResult.installed.length > 0 ||
+    applyResult.agentResult.restored.length > 0 ||
+    applyResult.profileResult.applied.length > 0 ||
+    applyResult.modelResult.configured.length > 0 ||
+    applyResult.skillResult.installed.length > 0 ||
+    applyResult.optionalSkillResult.installed.length > 0 ||
+    applyResult.graphifyResult.cliInstalled ||
+    applyResult.graphifyResult.officialSkillInstalled ||
+    applyResult.graphifyResult.explorerSkillInstalled;
+  if (wroteArchitecture || wroteOtherChanges) {
+    printRestartWarning();
+  } else {
+    printArchitectureUnchanged();
+  }
 }
-
-
