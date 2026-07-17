@@ -1334,3 +1334,132 @@
 #### Do Not Touch
 - Do not rewrite historical Developer, Reviewer, Architect, or Auditor entries.
 - Do not broaden reconciliation beyond Architect and the two core architecture skills without a new design cycle.
+
+### 2026-07-16 — Developer — Push rejected; recovery frozen
+
+#### Current Task
+- Post-commit push diagnosis for `48c76b1`.
+
+#### Current Status
+- Push to `origin/main` was rejected with `fetch first`. No recovery command has been run.
+
+#### What Was Attempted
+- User ran `git push -u origin main`.
+- Collected read-only checkout, branch, remote-tracking, and commit-graph evidence.
+
+#### What Changed
+- No product files or historical task/review/audit records were changed.
+- This incident entry is the only new work-folder evidence.
+
+#### Files Touched
+- `.path/work/architect-kernel-playbooks/progress.md`
+
+#### What Remains
+- Fetch the current `origin/main` and compare it with `48c76b1` only after user authorizes the network/update command.
+- Decide whether to merge or rebase the remote commits before retrying the push.
+
+#### Validation Run
+- Repository root: `/Users/yilo/Documents/Projects/opencode-workflow`.
+- Branch: `main`; working tree was clean before this incident entry.
+- Local `main` is `48c76b1` and was reported as `[origin/main: ahead 1]`; `origin/main` currently points to `3949d23` in the local remote-tracking cache.
+- `origin/graphify-code-only` contains separate commits after `origin/main`, but this does not establish the current remote `main` state.
+
+#### Validation Missing
+- Current remote state is unknown because `origin/main` has not been fetched after the rejection.
+- No merge-base/conflict analysis against the live remote has been performed.
+
+#### Decisions Made
+- Freeze writes and do not run `git pull`, `git merge`, `git rebase`, `git reset`, force-push, or cleanup commands without explicit next-step authorization.
+
+#### Notes for Next Session
+- The safest next diagnostic is `git fetch origin main`; then inspect `git log --oneline --graph HEAD..origin/main` and the merge base before choosing merge or rebase.
+
+#### Do Not Touch
+- Do not modify product files, rewrite historical workflow records, force-push, or discard either local or remote commits.
+
+### 2026-07-16 — Developer — Merge completed; push ready
+
+#### Current Task
+- Post-commit push recovery for `48c76b1`.
+
+#### Current Status
+- `origin/main` was merged successfully with no conflicts. The local branch is ready for a manual push.
+
+#### What Was Attempted
+- Ran `git merge origin/main` using the default `ort` strategy.
+- Re-ran the full repository validation suite after the merge.
+
+#### What Changed
+- Created merge commit `580f98b` preserving local architecture work and the six remote Graphify commits.
+- No conflict markers or unresolved merge state remain.
+
+#### Files Touched
+- `.path/work/architect-kernel-playbooks/progress.md` (incident evidence only)
+
+#### What Remains
+- User must run the manual push command. No push was executed by Developer.
+- The incident evidence added after the original commit remains uncommitted and can be committed separately if desired.
+
+#### Validation Run
+- `npm test` — 17 files passed, 474 tests passed.
+- `npm run typecheck` — passed.
+- `npm run build` — passed.
+- `npm run validate-dist` — passed.
+- `npm run smoke` — passed.
+- `git diff --check` — passed.
+- `git status -sb` — `main...origin/main [ahead 2]`; only the incident/progress log is uncommitted.
+
+#### Validation Missing
+- Manual push result is pending user execution.
+
+#### Decisions Made
+- Merge was chosen over rebase to preserve the published remote Graphify history and avoid rewriting the local `main` history.
+
+#### Notes for Next Session
+- Push with `git push -u origin main`. If the user wants the incident entries in the remote work-folder history, request explicit approval for a separate progress-log commit first.
+
+#### Do Not Touch
+- Do not force-push, discard remote commits, rewrite historical workflow records, or commit the progress log without explicit user instruction.
+
+### 2026-07-16 — Developer — Remote divergence identified
+
+#### Current Task
+- Post-commit push diagnosis for `48c76b1`.
+
+#### Current Status
+- Fetch completed. Local `main` and live `origin/main` have diverged; no merge/rebase has been started.
+
+#### What Was Attempted
+- Ran the user-authorized `git fetch origin main`.
+- Compared both commit ranges, merge base, working-tree state, and changed-file statistics.
+
+#### What Changed
+- Remote-tracking reference `origin/main` moved from `3949d23` to `33c5311`.
+- No product files, commits, merges, rebases, or historical workflow records were changed.
+
+#### Files Touched
+- `.path/work/architect-kernel-playbooks/progress.md`
+
+#### What Remains
+- Choose merge or rebase strategy before integrating the six remote Graphify commits with local architecture commit `48c76b1`.
+- Resolve any resulting conflicts, run validation, and retry push only after integration is authorized.
+
+#### Validation Run
+- `git status -sb` — `main...origin/main [ahead 1, behind 6]`; only this progress log is dirty.
+- `git log --oneline HEAD..origin/main` — remote commits: `33c5311`, `8bfe3c4`, `4dbe835`, `f15d835`, `38bce0d`, `e9349c7`.
+- `git log --oneline origin/main..HEAD` — local-only commit: `48c76b1`.
+- Merge base: `3949d23`.
+- Remote changes touch 14 files, including `README.md`; local changes touch 21 files, also including `README.md`, so README may require conflict resolution during integration.
+
+#### Validation Missing
+- No actual merge conflict status exists yet because neither merge nor rebase has been attempted.
+- Post-integration tests and push remain pending.
+
+#### Decisions Made
+- Do not force-push or discard remote Graphify commits. Do not choose merge/rebase silently because both histories contain independent feature commits and overlap in `README.md`.
+
+#### Notes for Next Session
+- Safest next step is user selection of `merge` or `rebase`; merge preserves both branch histories, while rebase rewrites the local architecture commit onto `origin/main`.
+
+#### Do Not Touch
+- Do not modify product files, rewrite historical workflow records, force-push, or discard either local or remote commits.
