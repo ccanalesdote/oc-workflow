@@ -11,6 +11,11 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { listTemplates, readTemplate } from "./templates.js";
+import {
+  isValidAgentModel,
+  parseFrontmatter,
+  setModelInContent,
+} from "./frontmatter.js";
 import type { PackAgentName } from "./paths.js";
 import {
   readConfig,
@@ -50,6 +55,22 @@ export const BUILTIN_MANAGED_AGENTS: readonly string[] = ["plan", "build", "expl
 
 /** HTML comment marker injected into installed custom agent files. */
 export const MANAGED_MARKER = "<!-- managed-by: opencode-path -->";
+
+/** Reconciliation action for the managed Architect definition. */
+export type ArchitectReconciliationAction =
+  | "create"
+  | "update"
+  | "unchanged"
+  | "conflict";
+
+/** Planned canonical reconciliation for the managed Architect file. */
+export interface ArchitectReconciliation {
+  name: "architect";
+  path: string;
+  action: ArchitectReconciliationAction;
+  expectedContent?: string;
+  reason?: string;
+}
 
 // ---------------------------------------------------------------------------
 // Catalog
@@ -152,6 +173,141 @@ export function addManagedMarker(content: string): string {
   // Ensure content ends with a newline, then add marker
   const trimmed = content.endsWith("\n") ? content : content + "\n";
   return trimmed + MANAGED_MARKER + "\n";
+}
+
+function canonicalArchitectContent(): string {
+  return addManagedMarker(readTemplate("architect"));
+}
+
+/**
+ * Compare the installed managed Architect with the packaged canonical
+ * definition. Only a valid, non-empty model is carried into the expected
+ * content; all other marked drift is intentionally replaceable.
+ */
+export function planArchitectReconciliation(
+  target: InstallTarget,
+  desired = true
+): ArchitectReconciliation | null {
+  const filePath = join(target.agentDir, "architect.md");
+  if (!desired) return null;
+
+  if (!existsSync(filePath)) {
+    return {
+      name: "architect",
+      path: filePath,
+      action: "create",
+      expectedContent: canonicalArchitectContent(),
+    };
+  }
+
+  let installedContent: string;
+  try {
+    installedContent = readFileSync(filePath, "utf-8");
+  } catch (error) {
+    return {
+      name: "architect",
+      path: filePath,
+      action: "conflict",
+      reason: `cannot read file: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+
+  if (!contentHasManagedMarker(installedContent)) {
+    return {
+      name: "architect",
+      path: filePath,
+      action: "conflict",
+      reason: "file has no managed marker",
+    };
+  }
+
+  let expectedContent = canonicalArchitectContent();
+  try {
+    const { frontmatter } = parseFrontmatter(installedContent);
+    if (Object.prototype.hasOwnProperty.call(frontmatter, "model")) {
+      const model = frontmatter.model;
+      if (!isValidAgentModel(model)) {
+        return {
+          name: "architect",
+          path: filePath,
+          action: "conflict",
+          reason: "frontmatter model must be a non-empty string",
+        };
+      }
+      expectedContent = setModelInContent(expectedContent, model);
+    }
+  } catch (error) {
+    return {
+      name: "architect",
+      path: filePath,
+      action: "conflict",
+      reason: `invalid frontmatter: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+
+  return {
+    name: "architect",
+    path: filePath,
+    action: installedContent === expectedContent ? "unchanged" : "update",
+    expectedContent,
+  };
+}
+
+/**
+ * Apply a previously approved Architect reconciliation. The marker is checked
+ * again at write time so a newly-created manual conflict is never overwritten.
+ */
+export function applyArchitectReconciliation(
+  reconciliation: ArchitectReconciliation,
+  target: InstallTarget
+): ArchitectReconciliationAction {
+  if (reconciliation.action === "unchanged" || reconciliation.action === "conflict") {
+    return reconciliation.action;
+  }
+
+  const filePath = join(target.agentDir, "architect.md");
+  // Re-plan immediately before writing. The aggregate init plan is created
+  // before confirmation, so the file may have changed while the user was
+  // deciding whether to apply it. This also re-applies the newest valid model
+  // instead of writing stale expectedContent from the preview.
+  const current = planArchitectReconciliation(target);
+  if (!current) {
+    reconciliation.reason = "Architect reconciliation is no longer desired";
+    return "conflict";
+  }
+
+  if (reconciliation.action === "create") {
+    if (current.action === "unchanged") {
+      // Another compatible writer completed the create between plan and apply.
+      return "unchanged";
+    }
+    if (current.action !== "create") {
+      reconciliation.reason = current.reason ??
+        "file appeared or changed between plan and apply";
+      return "conflict";
+    }
+  } else {
+    if (current.action === "unchanged") {
+      // The file became canonical while confirmation was pending.
+      return "unchanged";
+    }
+    if (current.action !== "update") {
+      reconciliation.reason = current.reason ??
+        "file changed or disappeared between plan and apply";
+      return "conflict";
+    }
+  }
+
+  const expectedContent = current.expectedContent;
+  if (!expectedContent) {
+    reconciliation.reason = "missing canonical Architect content after revalidation";
+    return "conflict";
+  }
+
+  const dir = dirname(filePath);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(filePath, expectedContent, "utf-8");
+  return reconciliation.action;
 }
 
 // ---------------------------------------------------------------------------

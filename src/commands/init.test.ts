@@ -42,8 +42,11 @@ import {
   MANAGED_MARKER,
   applyAgentChanges,
 } from "../lib/agents.js";
+import * as agentsLib from "../lib/agents.js";
 import { readTemplate, validateAllTemplates } from "../lib/templates.js";
-import { installCoreSkill } from "../lib/skills.js";
+import { installCoreSkill, installManagedSkill } from "../lib/skills.js";
+import { CORE_SKILLS } from "../lib/paths.js";
+import * as skillsLib from "../lib/skills.js";
 import * as opencodeModels from "../lib/opencode-models.js";
 import { CUSTOM_MODEL_VALUE } from "../lib/opencode-models.js";
 import * as messages from "../lib/messages.js";
@@ -67,6 +70,7 @@ const SKIP_MODELS_VALUE = "__skip_models__";
 const SKIP_ONE_MODEL_VALUE = "__skip_one_model__";
 
 const SKIP_OPTIONAL_SKILLS_VALUE = "__skip_optional_skills__";
+const CORE_SKILL_NAMES = [...CORE_SKILLS];
 
 /**
  * Helper: mock the Graphify prompt to reject (default "no").
@@ -131,6 +135,38 @@ function setupProjectFixture(opts?: {
   }
 
   return tmp;
+}
+
+function writeArchitectureDrift(root: string, model = "saved/provider-model"): void {
+  const agentPath = join(root, ".opencode", "agent", "architect.md");
+  const driftedArchitect = addManagedMarker(
+    readTemplate("architect")
+      .replace("mode: primary", `mode: primary\nmodel: ${model}`)
+      .replace("You are Architect, a strategic design partner.", "Legacy Architect body.")
+  );
+  writeFileSync(agentPath, driftedArchitect, "utf-8");
+
+  for (const skillName of CORE_SKILL_NAMES) {
+    writeFileSync(
+      join(root, ".opencode", "skills", skillName, "SKILL.md"),
+      `# Legacy ${skillName}\n${"<!-- managed-by: opencode-path -->"}\n`,
+      "utf-8"
+    );
+  }
+}
+
+function writeMarkedDeveloperDrift(root: string): void {
+  const developerPath = join(root, ".opencode", "agent", "developer.md");
+  writeFileSync(
+    developerPath,
+    addManagedMarker(
+      readTemplate("developer").replace(
+        "You are Developer, the execution agent.",
+        "Legacy Developer body."
+      )
+    ),
+    "utf-8"
+  );
 }
 
 describe("initCommand", () => {
@@ -257,7 +293,7 @@ describe("initCommand", () => {
         "auditor",
         "research",
       ],
-      activeSkills: ["cross-repo-architecture"],
+      activeSkills: CORE_SKILL_NAMES,
     });
 
     // Agent step: skip
@@ -278,6 +314,7 @@ describe("initCommand", () => {
 
     const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
     expect(output).toContain("No changes needed.");
+    expect(output).toContain("Architecture definitions were not changed; no restart is required.");
 
     logSpy.mockRestore();
     errorSpy.mockRestore();
@@ -436,7 +473,7 @@ describe("initCommand", () => {
         "auditor",
         "research",
       ],
-      activeSkills: ["cross-repo-architecture"],
+      activeSkills: CORE_SKILL_NAMES,
     });
 
     // Agent step: select agents → all 9 selected → no agent changes
@@ -842,17 +879,23 @@ describe("initCommand", () => {
     // Agent was installed
     expect(existsSync(join(root, ".opencode", "agent", "developer.md"))).toBe(true);
 
-    // Core skill was installed
-    const skillPath = join(root, ".opencode", "skills", "cross-repo-architecture", "SKILL.md");
-    expect(existsSync(skillPath)).toBe(true);
-    const skillContent = readFileSync(skillPath, "utf-8");
-    expect(skillContent).toContain("<!-- managed-by: opencode-path -->");
-    expect(skillContent).toContain("Cross-Repo Architecture");
+    // Both core skills were installed
+    for (const skillName of CORE_SKILL_NAMES) {
+      const skillPath = join(root, ".opencode", "skills", skillName, "SKILL.md");
+      expect(existsSync(skillPath)).toBe(true);
+      const skillContent = readFileSync(skillPath, "utf-8");
+      expect(skillContent).toContain("<!-- managed-by: opencode-path -->");
+      expect(skillContent).toContain(
+        skillName === "local-architecture" ? "Local Architecture" : "Cross-Repo Architecture"
+      );
+    }
 
     // Result output mentions skill installation
     const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
     expect(output).toContain("Skills installed:");
-    expect(output).toContain("cross-repo-architecture");
+    for (const skillName of CORE_SKILL_NAMES) {
+      expect(output).toContain(skillName);
+    }
 
     logSpy.mockRestore();
     errorSpy.mockRestore();
@@ -860,7 +903,7 @@ describe("initCommand", () => {
 
   it("init with skill already installed does not reinstall", async () => {
     chdirToFixture({
-      activeSkills: ["cross-repo-architecture"],
+      activeSkills: CORE_SKILL_NAMES,
     });
 
     // Agent step: skip
@@ -880,6 +923,7 @@ describe("initCommand", () => {
     // Should report "No changes needed." since skill is already installed
     // and no agents/profiles/models were selected
     expect(output).toContain("No changes needed.");
+    expect(output).toContain("Architecture definitions were not changed; no restart is required.");
 
     logSpy.mockRestore();
     errorSpy.mockRestore();
@@ -901,15 +945,20 @@ describe("initCommand", () => {
 
     await initCommand({ project: true, dryRun: true });
 
-    // Skill file should NOT exist
-    const skillPath = join(root, ".opencode", "skills", "cross-repo-architecture", "SKILL.md");
-    expect(existsSync(skillPath)).toBe(false);
+    // Core skill files should NOT exist
+    for (const skillName of CORE_SKILL_NAMES) {
+      const skillPath = join(root, ".opencode", "skills", skillName, "SKILL.md");
+      expect(existsSync(skillPath)).toBe(false);
+    }
 
     // Dry-run label was printed
     const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
     expect(output).toContain("No files were modified");
+    expect(output).toContain("Architecture definitions were not changed; no restart is required.");
     // Skills planned are shown
-    expect(output).toContain("cross-repo-architecture");
+    for (const skillName of CORE_SKILL_NAMES) {
+      expect(output).toContain(skillName);
+    }
 
     logSpy.mockRestore();
     errorSpy.mockRestore();
@@ -919,9 +968,11 @@ describe("initCommand", () => {
     const root = chdirToFixture();
 
     // Create an unmanaged skill file without the managed marker
-    const skillDir = join(root, ".opencode", "skills", "cross-repo-architecture");
-    mkdirSync(skillDir, { recursive: true });
-    writeFileSync(join(skillDir, "SKILL.md"), "# Manual skill\n", "utf-8");
+    for (const skillName of CORE_SKILL_NAMES) {
+      const skillDir = join(root, ".opencode", "skills", skillName);
+      mkdirSync(skillDir, { recursive: true });
+      writeFileSync(join(skillDir, "SKILL.md"), "# Manual skill\n", "utf-8");
+    }
 
     // Agent step: skip
     vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
@@ -943,14 +994,304 @@ describe("initCommand", () => {
 
     // Should NOT enter apply mode (no actionable changes)
     expect(output).toContain("No changes needed.");
+    expect(output).toContain("Architecture definitions were not changed; no restart is required.");
 
-    // Unmanaged file should NOT be overwritten
-    const content = readFileSync(join(skillDir, "SKILL.md"), "utf-8");
-    expect(content).toBe("# Manual skill\n");
-    expect(content).not.toContain("<!-- managed-by: opencode-path -->");
+    // Unmanaged files should NOT be overwritten
+    for (const skillName of CORE_SKILL_NAMES) {
+      const content = readFileSync(
+        join(root, ".opencode", "skills", skillName, "SKILL.md"),
+        "utf-8"
+      );
+      expect(content).toBe("# Manual skill\n");
+      expect(content).not.toContain("<!-- managed-by: opencode-path -->");
+    }
 
     logSpy.mockRestore();
     errorSpy.mockRestore();
+  });
+
+  describe("architecture bundle reconciliation", () => {
+    it("approves active Architect and both core-skill updates, preserves model, and is idempotent", async () => {
+      const root = chdirToFixture({
+        activeCustom: ["architect"],
+        activeSkills: CORE_SKILL_NAMES,
+      });
+      writeArchitectureDrift(root);
+
+      vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
+      mockOptionalSkillsSkip();
+      mockGraphifyReject();
+      mockModelsSkip();
+      vi.mocked(select).mockResolvedValueOnce("yes" as any);
+
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      await initCommand({ project: true });
+
+      const architect = readFileSync(join(root, ".opencode", "agent", "architect.md"), "utf-8");
+      expect(architect).toContain("model: saved/provider-model");
+      expect(architect).not.toContain("Legacy Architect body.");
+      for (const skillName of CORE_SKILL_NAMES) {
+        expect(readFileSync(join(root, ".opencode", "skills", skillName, "SKILL.md"), "utf-8"))
+          .toContain(skillName === "local-architecture" ? "Local Architecture" : "Cross-Repo Architecture");
+      }
+      const firstOutput = logSpy.mock.calls.map((call) => String(call[0])).join("\n");
+      expect(firstOutput).toContain("Updated:");
+      expect(firstOutput).toContain("Architecture warning:");
+      expect(firstOutput).toContain("Restart opencode");
+
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
+      vi.clearAllMocks();
+
+      vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
+      mockOptionalSkillsSkip();
+      mockGraphifyReject();
+      mockModelsSkip();
+      const rerunLog = vi.spyOn(console, "log").mockImplementation(() => {});
+      const rerunError = vi.spyOn(console, "error").mockImplementation(() => {});
+      await initCommand({ project: true });
+
+      const rerunOutput = rerunLog.mock.calls.map((call) => String(call[0])).join("\n");
+      expect(rerunOutput).toContain("No changes needed.");
+      expect(rerunOutput).toContain("Unchanged:");
+      expect(rerunOutput).toContain("Architecture summary: 0 created, 0 updated");
+      expect(rerunOutput).toContain("Architecture definitions were not changed; no restart is required.");
+      expect(rerunOutput).not.toContain("Restart opencode");
+      rerunLog.mockRestore();
+      rerunError.mockRestore();
+    });
+
+    it("interactive rejection preserves drift and does not request restart", async () => {
+      const root = chdirToFixture({
+        activeCustom: ["architect"],
+        activeSkills: CORE_SKILL_NAMES,
+      });
+      writeArchitectureDrift(root);
+      const beforeArchitect = readFileSync(join(root, ".opencode", "agent", "architect.md"), "utf-8");
+
+      vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
+      mockOptionalSkillsSkip();
+      mockGraphifyReject();
+      mockModelsSkip();
+      vi.mocked(select).mockResolvedValueOnce("no" as any);
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      await initCommand({ project: true });
+
+      expect(readFileSync(join(root, ".opencode", "agent", "architect.md"), "utf-8")).toBe(beforeArchitect);
+      expect(logSpy.mock.calls.map((call) => String(call[0])).join("\n")).toContain("Cancelled.");
+      expect(logSpy.mock.calls.map((call) => String(call[0])).join("\n")).toContain("Architecture definitions were not changed; no restart is required.");
+      expect(logSpy.mock.calls.map((call) => String(call[0])).join("\n")).not.toContain("Restart opencode");
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    it("--yes authorizes marked replacement without a second prompt", async () => {
+      const root = chdirToFixture({
+        activeCustom: ["architect"],
+        activeSkills: CORE_SKILL_NAMES,
+      });
+      writeArchitectureDrift(root);
+
+      vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
+      mockModelsSkip();
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      await initCommand({ project: true, yes: true });
+
+      expect(readFileSync(join(root, ".opencode", "agent", "architect.md"), "utf-8"))
+        .toContain("model: saved/provider-model");
+      expect(logSpy.mock.calls.map((call) => String(call[0])).join("\n")).toContain("Updated:");
+      expect(vi.mocked(select).mock.calls.some((call) =>
+        typeof call[0] === "object" && call[0] !== null &&
+        (call[0] as { message?: string }).message === "Apply these changes?"
+      )).toBe(false);
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    it("dry-run and dry-run+yes show the plan but write nothing", async () => {
+      for (const options of [{ dryRun: true }, { dryRun: true, yes: true }]) {
+        const root = chdirToFixture({
+          activeCustom: ["architect"],
+          activeSkills: CORE_SKILL_NAMES,
+        });
+        writeArchitectureDrift(root);
+        const before = readFileSync(join(root, ".opencode", "agent", "architect.md"), "utf-8");
+
+        vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
+        if (!options.yes) mockOptionalSkillsSkip();
+        mockModelsSkip();
+        const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+        const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+        await initCommand({ project: true, ...options });
+
+        expect(readFileSync(join(root, ".opencode", "agent", "architect.md"), "utf-8")).toBe(before);
+        const output = logSpy.mock.calls.map((call) => String(call[0])).join("\n");
+        expect(output).toContain("No files were modified");
+        expect(output).toContain("Architecture definitions were not changed; no restart is required.");
+        expect(output).not.toContain("Restart opencode");
+        logSpy.mockRestore();
+        errorSpy.mockRestore();
+        rmSync(root, { recursive: true, force: true });
+        tmpRoot = "";
+        vi.clearAllMocks();
+      }
+    });
+
+    it("creates missing Architect only when selected and never removes active Architect", async () => {
+      const unselectedRoot = chdirToFixture({ activeSkills: CORE_SKILL_NAMES });
+      vi.mocked(select).mockResolvedValueOnce("__select__" as any);
+      vi.mocked(checkbox).mockResolvedValueOnce([]);
+      vi.mocked(select).mockResolvedValueOnce(SKIP_PROFILES_VALUE as any);
+      mockModelsSkip();
+      await initCommand({ project: true, yes: true });
+      expect(existsSync(join(unselectedRoot, ".opencode", "agent", "architect.md"))).toBe(false);
+
+      rmSync(unselectedRoot, { recursive: true, force: true });
+      tmpRoot = "";
+      vi.clearAllMocks();
+
+      const selectedRoot = chdirToFixture({ activeSkills: CORE_SKILL_NAMES });
+      vi.mocked(select).mockResolvedValueOnce("__select__" as any);
+      vi.mocked(checkbox).mockResolvedValueOnce(["architect"]);
+      vi.mocked(select).mockResolvedValueOnce(SKIP_PROFILES_VALUE as any);
+      mockModelsSkip();
+      await initCommand({ project: true, yes: true });
+      expect(existsSync(join(selectedRoot, ".opencode", "agent", "architect.md"))).toBe(true);
+
+      writeArchitectureDrift(selectedRoot);
+      vi.clearAllMocks();
+      vi.mocked(select).mockResolvedValueOnce("__select__" as any);
+      vi.mocked(checkbox).mockResolvedValueOnce([]);
+      vi.mocked(select).mockResolvedValueOnce(SKIP_PROFILES_VALUE as any);
+      mockModelsSkip();
+      await initCommand({ project: true, yes: true });
+      expect(existsSync(join(selectedRoot, ".opencode", "agent", "architect.md"))).toBe(true);
+      expect(readFileSync(join(selectedRoot, ".opencode", "agent", "architect.md"), "utf-8"))
+        .toContain("You are Architect, a strategic design partner.");
+    });
+
+    it("preserves conflicts and does not mutate other agents, optional skills, or Graphify", async () => {
+      const root = chdirToFixture({
+        activeCustom: ["architect", "developer"],
+        activeSkills: CORE_SKILL_NAMES,
+      });
+      writeArchitectureDrift(root);
+      const crossPath = join(root, ".opencode", "skills", "cross-repo-architecture", "SKILL.md");
+      writeFileSync(crossPath, "# Manual cross skill\n", "utf-8");
+      writeMarkedDeveloperDrift(root);
+      const optionalTarget = {
+        scope: "project" as const,
+        agentDir: join(root, ".opencode", "agent"),
+        configPath: join(root, ".opencode", "opencode.json"),
+        skillDir: join(root, ".opencode", "skills"),
+      };
+      installManagedSkill("migration-and-data-change" as any, optionalTarget);
+      const developerBefore = readFileSync(join(root, ".opencode", "agent", "developer.md"), "utf-8");
+      const optionalBefore = readFileSync(join(root, ".opencode", "skills", "migration-and-data-change", "SKILL.md"), "utf-8");
+
+      vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
+      vi.mocked(select).mockResolvedValueOnce(SKIP_PROFILES_VALUE as any);
+      mockModelsSkip();
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      await initCommand({ project: true, yes: true });
+
+      expect(readFileSync(join(root, ".opencode", "agent", "developer.md"), "utf-8")).toBe(developerBefore);
+      expect(readFileSync(join(root, ".opencode", "skills", "migration-and-data-change", "SKILL.md"), "utf-8")).toBe(optionalBefore);
+      expect(readFileSync(crossPath, "utf-8")).toBe("# Manual cross skill\n");
+      const output = logSpy.mock.calls.map((call) => String(call[0])).join("\n");
+      expect(output).toContain("Skipped conflict");
+      expect(output).toContain("cross-repo-architecture");
+      expect(output).toContain("Architecture summary:");
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    it("preserves malformed Architect frontmatter/model as a reported conflict", async () => {
+      const root = chdirToFixture({
+        activeCustom: ["architect"],
+        activeSkills: CORE_SKILL_NAMES,
+      });
+      const architectPath = join(root, ".opencode", "agent", "architect.md");
+      const invalid = addManagedMarker(readTemplate("architect").replace("mode: primary", "mode: primary\nmodel: \"\""));
+      writeFileSync(architectPath, invalid, "utf-8");
+
+      vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
+      mockModelsSkip();
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      await initCommand({ project: true, yes: true });
+
+      expect(readFileSync(architectPath, "utf-8")).toBe(invalid);
+      const output = logSpy.mock.calls.map((call) => String(call[0])).join("\n");
+      expect(output).toContain("Skipped conflict");
+      expect(output).toContain("model must be a non-empty string");
+      expect(output).toContain("Architecture definitions were not changed; no restart is required.");
+      expect(output).not.toContain("Restart opencode");
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    it("reports completed and failed architecture paths and requests restart after partial success", async () => {
+      const root = chdirToFixture({
+        activeCustom: ["architect"],
+        activeSkills: CORE_SKILL_NAMES,
+      });
+      writeArchitectureDrift(root);
+      const originalApply = skillsLib.applyCoreSkillReconciliation;
+      vi.spyOn(skillsLib, "applyCoreSkillReconciliation").mockImplementation((entry, target) => {
+        if (entry.name === "local-architecture") throw new Error("simulated write failure");
+        return originalApply(entry, target);
+      });
+
+      vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
+      mockModelsSkip();
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      await initCommand({ project: true, yes: true });
+
+      const output = logSpy.mock.calls.map((call) => String(call[0])).join("\n");
+      expect(output).toContain("Failed:");
+      expect(output).toContain("simulated write failure");
+      expect(output).toContain("Restart opencode");
+      expect(readFileSync(join(root, ".opencode", "agent", "architect.md"), "utf-8"))
+        .toContain("You are Architect, a strategic design partner.");
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    it("does not request restart when every architecture write fails", async () => {
+      const root = chdirToFixture({
+        activeCustom: ["architect"],
+        activeSkills: CORE_SKILL_NAMES,
+      });
+      writeArchitectureDrift(root);
+      vi.spyOn(agentsLib, "applyArchitectReconciliation").mockImplementation(() => {
+        throw new Error("simulated Architect write failure");
+      });
+      vi.spyOn(skillsLib, "applyCoreSkillReconciliation").mockImplementation(() => {
+        throw new Error("simulated skill write failure");
+      });
+
+      vi.mocked(select).mockResolvedValueOnce(SKIP_AGENTS_VALUE as any);
+      mockModelsSkip();
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      await initCommand({ project: true, yes: true });
+
+      const output = logSpy.mock.calls.map((call) => String(call[0])).join("\n");
+      expect(output).toContain("Architecture reconciliation partially failed.");
+      expect(output).toContain("Architecture definitions were not changed; no restart is required.");
+      expect(output).not.toContain("Restart opencode");
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -977,11 +1318,11 @@ describe("initCommand", () => {
     );
     expect(existsSync(optSkillPath)).toBe(false);
 
-    // But core skill should still be installed
-    const coreSkillPath = join(
-      root, ".opencode", "skills", "cross-repo-architecture", "SKILL.md"
-    );
-    expect(existsSync(coreSkillPath)).toBe(true);
+    // Both core skills should still be installed
+    for (const skillName of CORE_SKILL_NAMES) {
+      const coreSkillPath = join(root, ".opencode", "skills", skillName, "SKILL.md");
+      expect(existsSync(coreSkillPath)).toBe(true);
+    }
 
     logSpy.mockRestore();
     errorSpy.mockRestore();
@@ -989,7 +1330,7 @@ describe("initCommand", () => {
 
   it("init does not remove optional skills when unchecked", async () => {
     const root = chdirToFixture({
-      activeSkills: ["cross-repo-architecture", "migration-and-data-change"],
+      activeSkills: [...CORE_SKILL_NAMES, "migration-and-data-change"],
     });
 
     // Agent step: skip
@@ -1267,15 +1608,11 @@ describe("initCommand", () => {
       );
       expect(existsSync(explorerPath)).toBe(false);
 
-      // Main init should still complete (core skill installed)
-      const coreSkillPath = join(
-        root,
-        ".opencode",
-        "skills",
-        "cross-repo-architecture",
-        "SKILL.md"
-      );
-      expect(existsSync(coreSkillPath)).toBe(true);
+       // Main init should still complete (both core skills installed)
+       for (const skillName of CORE_SKILL_NAMES) {
+         const coreSkillPath = join(root, ".opencode", "skills", skillName, "SKILL.md");
+         expect(existsSync(coreSkillPath)).toBe(true);
+       }
     });
 
     it("accepted + official skill install fails: no graphify-explorer", async () => {

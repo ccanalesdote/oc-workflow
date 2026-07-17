@@ -7,6 +7,7 @@ import {
   getAgentModel,
   setAgentModel,
   setModelInContent,
+  isValidAgentModel,
 } from "./frontmatter.js";
 import {
   readFileSync,
@@ -158,6 +159,18 @@ Body here.
     const bashRules = bash.bash as Record<string, string>;
     expect(bashRules["*"]).toBe("ask");
     expect(bashRules["git status*"]).toBe("allow");
+  });
+});
+
+describe("isValidAgentModel", () => {
+  it("accepts non-empty model strings and rejects invalid mutable state", () => {
+    expect(isValidAgentModel("provider/model")).toBe(true);
+    expect(isValidAgentModel(" model-without-provider ")).toBe(true);
+    expect(isValidAgentModel("")).toBe(false);
+    expect(isValidAgentModel("   ")).toBe(false);
+    expect(isValidAgentModel(undefined)).toBe(false);
+    expect(isValidAgentModel(null)).toBe(false);
+    expect(isValidAgentModel({ value: "provider/model" })).toBe(false);
   });
 });
 
@@ -369,6 +382,13 @@ describe("setAgentModel", () => {
 });
 
 describe("setModelInContent", () => {
+  const yamlSensitiveModels = [
+    "provider/model #pinned",
+    "provider/model:variant",
+    'provider/model "quoted"',
+    " provider/model ",
+  ];
+
   it("inserts model after mode: line when no model exists", () => {
     const result = setModelInContent(SAMPLE_AGENT, "openai/gpt-5.5");
     expect(result).toContain("model: openai/gpt-5.5");
@@ -382,6 +402,41 @@ describe("setModelInContent", () => {
     const result = setModelInContent(SAMPLE_AGENT_WITH_MODEL, "new/model");
     expect(result).toContain("model: new/model");
     expect(result).not.toContain("model: anthropic/claude-sonnet-4-6");
+  });
+
+  it.each(yamlSensitiveModels)(
+    "preserves the exact YAML-sensitive model value when inserting: %j",
+    (model) => {
+      const original = parseFrontmatter(AGENT_WITH_COMMENTS_AND_MARKER);
+      const result = setModelInContent(AGENT_WITH_COMMENTS_AND_MARKER, model);
+      const reparsed = parseFrontmatter(result);
+
+      expect(reparsed.frontmatter.model).toBe(model);
+      expect(reparsed.body).toBe(original.body);
+      expect(result).toContain("# Optional stack-specific profiles are inserted here by opencode-path profiles");
+      expect(result).toContain('"*": "ask"');
+    }
+  );
+
+  it.each(yamlSensitiveModels)(
+    "preserves the exact YAML-sensitive model value when replacing: %j",
+    (model) => {
+      const original = parseFrontmatter(SAMPLE_AGENT_WITH_MODEL);
+      const result = setModelInContent(SAMPLE_AGENT_WITH_MODEL, model);
+      const reparsed = parseFrontmatter(result);
+
+      expect(reparsed.frontmatter.model).toBe(model);
+      expect(reparsed.body).toBe(original.body);
+    }
+  );
+
+  it("is idempotent across parse, write, and parse for a sensitive model", () => {
+    const model = "provider/model #pinned";
+    const first = setModelInContent(AGENT_WITH_COMMENTS_AND_MARKER, model);
+    const second = setModelInContent(first, parseFrontmatter(first).frontmatter.model as string);
+
+    expect(parseFrontmatter(first).frontmatter.model).toBe(model);
+    expect(second).toBe(first);
   });
 
   it("preserves comments in the frontmatter", () => {

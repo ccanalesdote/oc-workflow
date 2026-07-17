@@ -144,3 +144,24 @@ describe("Graphify skill catalog", () => {
     expect(isOptionalSkill("graphify-explorer")).toBe(false);
   });
 });
+
+describe("architecture core skill catalog", () => {
+  it("contains exactly the local and cross architecture playbooks", () => {
+    expect(CORE_SKILLS).toEqual([
+      "local-architecture",
+      "cross-repo-architecture",
+    ]);
+  });
+
+  it("classifies both architecture playbooks as core managed skills", () => {
+    expect(isCoreSkill("local-architecture")).toBe(true);
+    expect(isCoreSkill("cross-repo-architecture")).toBe(true);
+    expect(isManagedSkill("local-architecture")).toBe(true);
+    expect(isManagedSkill("cross-repo-architecture")).toBe(true);
+  });
+
+  it("keeps both architecture playbooks out of optional skills", () => {
+    expect(OPTIONAL_SKILLS).not.toContain("local-architecture");
+    expect(OPTIONAL_SKILLS).not.toContain("cross-repo-architecture");
+  });
+});

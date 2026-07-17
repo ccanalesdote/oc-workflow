@@ -71,6 +71,7 @@ export type PackAgentName = (typeof PACK_AGENTS)[number];
  * optional. They use the same managed marker convention as agents.
  */
 export const CORE_SKILLS = [
+  "local-architecture",
   "cross-repo-architecture",
 ] as const;
 

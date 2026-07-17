@@ -21,6 +21,8 @@ import {
   installCoreSkill,
   updateManagedSkill,
   deleteManagedSkill,
+  planCoreSkillReconciliation,
+  applyCoreSkillReconciliation,
 } from "./skills.js";
 import { parseFrontmatter } from "./frontmatter.js";
 import {
@@ -34,6 +36,10 @@ import { join } from "node:path";
 import { resolveTarget, CORE_SKILLS, OPTIONAL_SKILLS, GRAPHIFY_SKILLS, ALL_MANAGED_SKILLS, type InstallTarget, type CoreSkillName, type ManagedSkillName } from "./paths.js";
 
 const FIXTURE_DIR = join(import.meta.dirname, "__fixtures__", "skills");
+const ARCHITECTURE_SKILLS = [
+  "local-architecture",
+  "cross-repo-architecture",
+] as const;
 
 beforeEach(() => {
   mkdirSync(FIXTURE_DIR, { recursive: true });
@@ -77,31 +83,70 @@ describe("getSkillTemplatesDir", () => {
 
 describe("getSkillTemplateDir", () => {
   it("returns path containing the skill name", () => {
-    const dir = getSkillTemplateDir("cross-repo-architecture");
-    expect(dir).toContain("cross-repo-architecture");
-    expect(existsSync(dir)).toBe(true);
+    for (const skillName of ARCHITECTURE_SKILLS) {
+      const dir = getSkillTemplateDir(skillName);
+      expect(dir).toContain(skillName);
+      expect(existsSync(dir)).toBe(true);
+    }
   });
 });
 
 describe("getSkillTemplatePath", () => {
   it("returns path ending in SKILL.md", () => {
-    const path = getSkillTemplatePath("cross-repo-architecture");
-    expect(path).toContain("SKILL.md");
-    expect(existsSync(path)).toBe(true);
+    for (const skillName of ARCHITECTURE_SKILLS) {
+      const path = getSkillTemplatePath(skillName);
+      expect(path).toContain("SKILL.md");
+      expect(existsSync(path)).toBe(true);
+    }
   });
 });
 
 describe("readSkillTemplate", () => {
-  it("reads the cross-repo-architecture template", () => {
-    const content = readSkillTemplate("cross-repo-architecture");
-    expect(content).toContain("Cross-Repo Architecture");
-    expect(content).toContain(MANAGED_SKILL_MARKER);
+  it("reads both architecture templates", () => {
+    expect(readSkillTemplate("local-architecture")).toContain("Local Architecture");
+    expect(readSkillTemplate("cross-repo-architecture")).toContain("Cross-Repo Architecture");
+    for (const skillName of ARCHITECTURE_SKILLS) {
+      expect(readSkillTemplate(skillName)).toContain(MANAGED_SKILL_MARKER);
+    }
   });
 
   it("throws for non-existent skill", () => {
     expect(() => readSkillTemplate("nonexistent" as any)).toThrow(
       "Skill template not found"
     );
+  });
+});
+
+describe("architecture core-skill reconciliation", () => {
+  it("classifies missing, canonical, and marked drift independently", () => {
+    const target = fixtureTarget();
+    const missing = planCoreSkillReconciliation("local-architecture", target);
+    expect(missing.action).toBe("create");
+
+    installCoreSkill("local-architecture", target);
+    expect(planCoreSkillReconciliation("local-architecture", target).action).toBe("unchanged");
+
+    const filePath = getSkillInstallPath("local-architecture", target);
+    writeFileSync(filePath, `# Drift\n${MANAGED_SKILL_MARKER}\n`, "utf-8");
+    expect(planCoreSkillReconciliation("local-architecture", target).action).toBe("update");
+  });
+
+  it("applies canonical create/update and preserves unmarked conflicts", () => {
+    const target = fixtureTarget();
+    const create = planCoreSkillReconciliation("cross-repo-architecture", target);
+    expect(applyCoreSkillReconciliation(create, target)).toBe("create");
+    expect(readFileSync(create.path, "utf-8")).toContain("Cross-Repo Architecture");
+
+    writeFileSync(create.path, `# Drift\n${MANAGED_SKILL_MARKER}\n`, "utf-8");
+    const update = planCoreSkillReconciliation("cross-repo-architecture", target);
+    expect(applyCoreSkillReconciliation(update, target)).toBe("update");
+    expect(readFileSync(create.path, "utf-8")).toContain("Cross-Repo Architecture");
+
+    writeFileSync(create.path, "# Manual skill\n", "utf-8");
+    const conflict = planCoreSkillReconciliation("cross-repo-architecture", target);
+    expect(conflict.action).toBe("conflict");
+    expect(applyCoreSkillReconciliation(conflict, target)).toBe("conflict");
+    expect(readFileSync(create.path, "utf-8")).toBe("# Manual skill\n");
   });
 });
 
@@ -131,75 +176,159 @@ describe("validateAllSkillTemplates", () => {
 // ---------------------------------------------------------------------------
 
 describe("skill template frontmatter", () => {
-  it("cross-repo-architecture SKILL.md has valid YAML frontmatter (AC-01)", () => {
-    const content = readSkillTemplate("cross-repo-architecture");
-    const { frontmatter, body } = parseFrontmatter(content);
+  for (const skillName of ARCHITECTURE_SKILLS) {
+    it(`${skillName} SKILL.md has valid YAML frontmatter`, () => {
+      const content = readSkillTemplate(skillName);
+      const { frontmatter, body } = parseFrontmatter(content);
 
-    // Frontmatter exists and has required fields
-    expect(frontmatter).toBeDefined();
-    expect(frontmatter.name).toBe("cross-repo-architecture");
+      expect(frontmatter).toBeDefined();
+      expect(frontmatter.name).toBe(skillName);
+      expect(typeof frontmatter.description).toBe("string");
+      expect((frontmatter.description as string).length).toBeGreaterThan(0);
+      expect(body).toContain(MANAGED_SKILL_MARKER);
+    });
+  }
 
-    const desc = frontmatter.description;
-    expect(typeof desc).toBe("string");
-    expect((desc as string).length).toBeGreaterThan(0);
+  it("installed architecture skills preserve frontmatter and managed marker", () => {
+    for (const skillName of ARCHITECTURE_SKILLS) {
+      const target = fixtureTarget();
+      const result = installCoreSkill(skillName, target);
+      expect(result).toBe("created");
 
-    // Body still contains the expected heading and marker
-    expect(body).toContain("# Cross-Repo Architecture");
-    expect(body).toContain(MANAGED_SKILL_MARKER);
+      const filePath = getSkillInstallPath(skillName, target);
+      const content = readFileSync(filePath, "utf-8");
+      const { frontmatter, body } = parseFrontmatter(content);
+      expect(frontmatter.name).toBe(skillName);
+      expect(typeof frontmatter.description).toBe("string");
+      expect((frontmatter.description as string).length).toBeGreaterThan(0);
+      expect(body).toContain(MANAGED_SKILL_MARKER);
+    }
   });
 
-  it("installed skill preserves frontmatter and managed marker (AC-02)", () => {
-    const target = fixtureTarget();
-    const result = installCoreSkill("cross-repo-architecture", target);
-    expect(result).toBe("created");
+  it("updateManagedSkill preserves frontmatter through architecture update cycles", () => {
+    for (const skillName of ARCHITECTURE_SKILLS) {
+      const target = fixtureTarget();
+      installCoreSkill(skillName, target);
 
-    const filePath = getSkillInstallPath("cross-repo-architecture", target);
-    const content = readFileSync(filePath, "utf-8");
-
-    // Frontmatter is preserved
-    const { frontmatter, body } = parseFrontmatter(content);
-    expect(frontmatter.name).toBe("cross-repo-architecture");
-    expect(typeof frontmatter.description).toBe("string");
-    expect((frontmatter.description as string).length).toBeGreaterThan(0);
-
-    // Body content and marker are preserved
-    expect(body).toContain("# Cross-Repo Architecture");
-    expect(body).toContain(MANAGED_SKILL_MARKER);
-  });
-
-  it("updateManagedSkill preserves frontmatter through update cycle (AC-02)", () => {
-    const target = fixtureTarget();
-    installCoreSkill("cross-repo-architecture", target);
-
-    // Simulate older version
-    const filePath = getSkillInstallPath("cross-repo-architecture", target);
-    writeFileSync(
-      filePath,
-      `---
-name: cross-repo-architecture
+      const filePath = getSkillInstallPath(skillName, target);
+      writeFileSync(
+        filePath,
+        `---
+name: ${skillName}
 description: Old description.
 ---
 # Old content
 ${MANAGED_SKILL_MARKER}
 `,
-      "utf-8"
-    );
+        "utf-8"
+      );
 
-    const result = updateManagedSkill("cross-repo-architecture", target);
-    expect(result).toBe("updated");
+      const result = updateManagedSkill(skillName, target);
+      expect(result).toBe("updated");
 
-    const content = readFileSync(filePath, "utf-8");
-    const { frontmatter, body } = parseFrontmatter(content);
+      const content = readFileSync(filePath, "utf-8");
+      const { frontmatter, body } = parseFrontmatter(content);
+      expect(frontmatter.name).toBe(skillName);
+      expect(typeof frontmatter.description).toBe("string");
+      expect(frontmatter.description as string).not.toBe("Old description.");
+      expect((frontmatter.description as string).length).toBeGreaterThan(0);
+      expect(body).toContain(MANAGED_SKILL_MARKER);
+    }
+  });
+});
 
-    // Updated frontmatter has current description
-    expect(frontmatter.name).toBe("cross-repo-architecture");
-    expect(typeof frontmatter.description).toBe("string");
-    expect((frontmatter.description as string)).not.toBe("Old description.");
-    expect((frontmatter.description as string).length).toBeGreaterThan(0);
+describe("cross-repo architecture playbook", () => {
+  it("defines the minimal coordination artifact shape", () => {
+    const content = readSkillTemplate("cross-repo-architecture");
 
-    // Body is updated to current template
-    expect(body).toContain("# Cross-Repo Architecture");
-    expect(body).toContain(MANAGED_SKILL_MARKER);
+    expect(content).toContain(".path/work/{feature-slug}/");
+    expect(content).toContain("brief.md");
+    expect(content).toContain("repos/{repo}.md");
+    expect(content).toContain("one `repos/{repo}.md` draft for each affected implementation boundary");
+    expect(content).toContain("no `tasks.md` and no `progress.md`");
+    expect(content).toContain("## Participating repositories and responsibilities");
+    expect(content).toContain("## Compatibility matrix");
+    expect(content).toContain("## Development ordering constraints");
+    expect(content).toContain("## Open cross decisions");
+  });
+
+  it("separates shared contracts from local decision space", () => {
+    const content = readSkillTemplate("cross-repo-architecture");
+
+    for (const section of [
+      "## Assigned responsibility",
+      "## Binding shared contracts",
+      "## Compatibility obligations",
+      "## Local decision space",
+      "## Prohibited local decisions",
+      "## Escalation",
+    ]) {
+      expect(content).toContain(section);
+    }
+
+    expect(content).toContain("internal data access and query design");
+    expect(content).toContain("migrations internal to that repository");
+    expect(content).toMatch(/Coordination context stays in the\s+cross artifact/);
+  });
+
+  it("prohibits local planning and post-commit operational ownership", () => {
+    const content = readSkillTemplate("cross-repo-architecture");
+
+    for (const prohibited of [
+      "local acceptance criteria",
+      "Developer implementation tasks",
+      "checkpoints or local progress logs",
+      "QA or production deployment management",
+      "operational migration execution",
+      "feature-flag or runtime activation",
+      "scheduler activation",
+      "deployed smoke requirements",
+    ]) {
+      expect(content).toContain(prohibited);
+    }
+
+    expect(content).toContain("Do not create a separate `cross-architect`");
+    expect(content).toContain("Compatibility-preserving development order may be stated");
+    expect(content).toContain("does not manage or prove the later deployment or operations");
+  });
+});
+
+describe("architecture protocol traceability", () => {
+  it("local playbook defines exact local schemas and AC/task/checkpoint mapping", () => {
+    const content = readSkillTemplate("local-architecture");
+
+    expect(content).toContain(".path/work/{feature-slug}/");
+    expect(content).toContain("brief.md\n  tasks.md\n  progress.md");
+    expect(content).toContain("## `tasks.md` local schema");
+    expect(content).toContain("## `progress.md` local execution log");
+    expect(content).toContain("| ID | Status | Owner | Files / areas | Technical objective | Covers | Dependencies | Verification | Notes |");
+    expect(content).toContain("| ID | Included tasks | Intended ACs closed | Reviewer focus | Expected evidence | Reviewer required |");
+    expect(content).toMatch(/Every criterion must be\s+covered by at least one task/);
+    expect(content).toContain("Every task belongs to a checkpoint");
+    expect(content).toMatch(/Reviewer required:\s+yes/);
+  });
+
+  it("local cross-draft consumption is binding and stops when the playbook is unavailable", () => {
+    const content = readSkillTemplate("local-architecture");
+
+    expect(content).toMatch(/Load this local playbook only/i);
+    expect(content).toMatch(/Treat code-affecting shared API, DTO, event, auth, error, and compatibility\s+obligations as binding input/);
+    expect(content).toMatch(/internal data access, query design, module layout, files, tests,\s+migrations internal to this repository, and local configuration/);
+    expect(content).toMatch(/If the required\s+`local-architecture` skill is unavailable or cannot be loaded/);
+    expect(content).toContain("stop and report the problem");
+  });
+
+  it("cross playbook has exact artifact exclusions and keeps the shared preflight in the kernel", () => {
+    const content = readSkillTemplate("cross-repo-architecture");
+
+    expect(content).toContain("no `tasks.md` and no `progress.md`");
+    expect(content).toContain("Cross artifacts must not contain or own:");
+    expect(content).toContain("local acceptance criteria");
+    expect(content).toContain("Developer implementation tasks");
+    expect(content).toContain("checkpoints or local progress logs");
+    expect(content).toContain("repository validation commands, evidence receipts, or post-commit proof");
+    expect(content).toMatch(/Use the Architect\s+kernel's complete common Mode 3\s+preflight/i);
+    expect(content).toMatch(/resulting cross\s+artifacts remain only `brief.md` plus\s+`repos\/\{repo\}\.md` drafts/);
   });
 });
 
@@ -311,9 +440,11 @@ describe("listManagedSkillCatalog", () => {
   it("distinguishes core vs optional in ManagedSkillStatus kind field", () => {
     const target = fixtureTarget();
     const statuses = listManagedSkillStatuses(target);
-    const coreStatus = statuses.find((s) => s.name === "cross-repo-architecture");
-    expect(coreStatus).toBeDefined();
-    expect(coreStatus!.kind).toBe("core");
+    for (const skillName of CORE_SKILLS) {
+      const coreStatus = statuses.find((s) => s.name === skillName);
+      expect(coreStatus).toBeDefined();
+      expect(coreStatus!.kind).toBe("core");
+    }
     const optionalStatus = statuses.find((s) => s.name === "migration-and-data-change");
     expect(optionalStatus).toBeDefined();
     expect(optionalStatus!.kind).toBe("optional");
