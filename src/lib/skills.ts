@@ -31,6 +31,35 @@ import {
 /** HTML comment marker injected into installed managed skill files. */
 export const MANAGED_SKILL_MARKER = "<!-- managed-by: opencode-path -->";
 
+/** Reconciliation action for any managed skill definition. */
+export type ManagedSkillReconciliationAction =
+  | "create"
+  | "replace"
+  | "unchanged"
+  | "remove"
+  | "conflict";
+
+/** Options for canonical managed-skill reconciliation. */
+export interface ManagedSkillReconciliationOptions {
+  /** Desired target for optional skills. Core and Graphify are update-only. */
+  desired?: boolean;
+  /** Whether a missing definition may be created. */
+  createMissing?: boolean;
+}
+
+/** Planned canonical reconciliation for a managed skill. */
+export interface ManagedSkillReconciliation {
+  name: ManagedSkillName;
+  path: string;
+  action: ManagedSkillReconciliationAction;
+  expectedContent?: string;
+  /** Effective desired state used when the plan is revalidated at apply time. */
+  desired: boolean;
+  /** Effective missing-file creation permission used at apply time. */
+  createMissing: boolean;
+  reason?: string;
+}
+
 /** Reconciliation action for a managed architecture core skill. */
 export type CoreSkillReconciliationAction =
   | "create"
@@ -203,8 +232,157 @@ export function addSkillMarker(content: string): string {
   return trimmed + MANAGED_SKILL_MARKER + "\n";
 }
 
-function canonicalCoreSkillContent(skillName: CoreSkillName): string {
+function skillKind(skillName: ManagedSkillName): ManagedSkillKind {
+  if (isCoreSkill(skillName)) return "core";
+  if (isOptionalSkill(skillName)) return "optional";
+  return "graphify";
+}
+
+function canonicalManagedSkillContent(skillName: ManagedSkillName): string {
   return addSkillMarker(readSkillTemplate(skillName));
+}
+
+function skillConflict(
+  skillName: ManagedSkillName,
+  filePath: string,
+  reason: string,
+  desired: boolean,
+  createMissing: boolean
+): ManagedSkillReconciliation {
+  return {
+    name: skillName,
+    path: filePath,
+    action: "conflict",
+    desired,
+    createMissing,
+    reason,
+  };
+}
+
+/**
+ * Plan canonical reconciliation for core, optional, and graphify skills.
+ * Core skills are always desired. Graphify Explorer is update-only by default:
+ * an absent or unmarked external definition is never adopted automatically.
+ */
+export function planManagedSkillReconciliation(
+  skillName: ManagedSkillName,
+  target: InstallTarget,
+  options: ManagedSkillReconciliationOptions = {}
+): ManagedSkillReconciliation {
+  const kind = skillKind(skillName);
+  const desired = kind === "core" || kind === "graphify"
+    ? true
+    : options.desired ?? true;
+  const createMissing = options.createMissing ?? kind !== "graphify";
+  const filePath = getSkillInstallPath(skillName, target);
+
+  if (!desired) {
+    if (!existsSync(filePath)) {
+      return { name: skillName, path: filePath, action: "unchanged", desired, createMissing };
+    }
+
+    if (!fileHasSkillMarker(filePath)) {
+      return skillConflict(skillName, filePath, "file has no managed marker", desired, createMissing);
+    }
+
+    return { name: skillName, path: filePath, action: "remove", desired, createMissing };
+  }
+
+  if (!existsSync(filePath)) {
+    if (!createMissing) {
+      return { name: skillName, path: filePath, action: "unchanged", desired, createMissing };
+    }
+
+    try {
+      return {
+        name: skillName,
+        path: filePath,
+        action: "create",
+        expectedContent: canonicalManagedSkillContent(skillName),
+        desired,
+        createMissing,
+      };
+    } catch (error) {
+      return skillConflict(
+        skillName,
+        filePath,
+        `cannot compose canonical content: ${error instanceof Error ? error.message : String(error)}`,
+        desired,
+        createMissing
+      );
+    }
+  }
+
+  if (!fileHasSkillMarker(filePath)) {
+    return skillConflict(skillName, filePath, "file has no managed marker", desired, createMissing);
+  }
+
+  try {
+    const installedContent = readFileSync(filePath, "utf-8");
+    const expectedContent = canonicalManagedSkillContent(skillName);
+    return {
+      name: skillName,
+      path: filePath,
+      action: installedContent === expectedContent ? "unchanged" : "replace",
+      expectedContent,
+      desired,
+      createMissing,
+    };
+  } catch (error) {
+    return skillConflict(
+      skillName,
+      filePath,
+      `cannot reconcile file: ${error instanceof Error ? error.message : String(error)}`,
+      desired,
+      createMissing
+    );
+  }
+}
+
+/** Apply a previously approved managed-skill reconciliation safely. */
+export function applyManagedSkillReconciliation(
+  reconciliation: ManagedSkillReconciliation,
+  target: InstallTarget
+): ManagedSkillReconciliationAction {
+  if (reconciliation.action === "unchanged" || reconciliation.action === "conflict") {
+    return reconciliation.action;
+  }
+
+  const current = planManagedSkillReconciliation(reconciliation.name, target, {
+    desired: reconciliation.desired,
+    createMissing: reconciliation.createMissing,
+  });
+  if (current.action === "unchanged") return "unchanged";
+  if (current.action !== reconciliation.action) return "conflict";
+
+  if (reconciliation.action === "remove") {
+    return deleteManagedSkill(reconciliation.name, target) ? "remove" : "conflict";
+  }
+
+  if (!current.expectedContent) return "conflict";
+  const dir = dirname(reconciliation.path);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(reconciliation.path, current.expectedContent, "utf-8");
+  return reconciliation.action;
+}
+
+function toCoreSkillReconciliation(
+  reconciliation: ManagedSkillReconciliation
+): CoreSkillReconciliation {
+  return {
+    name: reconciliation.name as CoreSkillName,
+    path: reconciliation.path,
+    action:
+      reconciliation.action === "replace"
+        ? "update"
+        : reconciliation.action === "create" ||
+            reconciliation.action === "unchanged" ||
+            reconciliation.action === "conflict"
+          ? reconciliation.action
+          : "conflict",
+    expectedContent: reconciliation.expectedContent,
+    reason: reconciliation.reason,
+  };
 }
 
 /** Compare one architecture core skill with its packaged canonical content. */
@@ -212,42 +390,12 @@ export function planCoreSkillReconciliation(
   skillName: CoreSkillName,
   target: InstallTarget
 ): CoreSkillReconciliation {
-  const filePath = getSkillInstallPath(skillName, target);
-  if (!existsSync(filePath)) {
-    return {
-      name: skillName,
-      path: filePath,
-      action: "create",
-      expectedContent: canonicalCoreSkillContent(skillName),
-    };
-  }
-
-  if (!fileHasSkillMarker(filePath)) {
-    return {
-      name: skillName,
-      path: filePath,
-      action: "conflict",
-      reason: "file has no managed marker",
-    };
-  }
-
-  try {
-    const installedContent = readFileSync(filePath, "utf-8");
-    const expectedContent = canonicalCoreSkillContent(skillName);
-    return {
-      name: skillName,
-      path: filePath,
-      action: installedContent === expectedContent ? "unchanged" : "update",
-      expectedContent,
-    };
-  } catch (error) {
-    return {
-      name: skillName,
-      path: filePath,
-      action: "conflict",
-      reason: `cannot read file: ${error instanceof Error ? error.message : String(error)}`,
-    };
-  }
+  return toCoreSkillReconciliation(
+    planManagedSkillReconciliation(skillName, target, {
+      desired: true,
+      createMissing: true,
+    })
+  );
 }
 
 /** Apply a previously approved architecture core-skill reconciliation. */
@@ -259,23 +407,21 @@ export function applyCoreSkillReconciliation(
     return reconciliation.action;
   }
 
-  const expectedContent = reconciliation.expectedContent;
-  if (!expectedContent) {
-    throw new Error(`Missing canonical skill content for ${reconciliation.path}`);
-  }
-
-  if (existsSync(reconciliation.path)) {
-    const current = readFileSync(reconciliation.path, "utf-8");
-    if (!contentHasSkillMarker(current)) return "conflict";
-    if (reconciliation.action === "create" && current === expectedContent) {
-      return "create";
-    }
-  }
-
-  const dir = dirname(reconciliation.path);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(reconciliation.path, expectedContent, "utf-8");
-  return reconciliation.action;
+  const result = applyManagedSkillReconciliation(
+    {
+      name: reconciliation.name,
+      path: reconciliation.path,
+      action: reconciliation.action === "update" ? "replace" : reconciliation.action,
+      expectedContent: reconciliation.expectedContent,
+      desired: true,
+      createMissing: true,
+      reason: reconciliation.reason,
+    },
+    target
+  );
+  if (result === "replace") return "update";
+  if (result === "remove") return "conflict";
+  return result;
 }
 
 // ---------------------------------------------------------------------------

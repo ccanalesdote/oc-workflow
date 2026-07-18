@@ -18,6 +18,8 @@ import {
   listActiveManagedModelAgents,
   detectManageableScopes,
   installCustomAgent,
+  planCustomAgentReconciliation,
+  applyCustomAgentReconciliation,
   planArchitectReconciliation,
   applyArchitectReconciliation,
   deleteCustomAgent,
@@ -40,6 +42,7 @@ import { join } from "node:path";
 import { resolveTarget, type InstallTarget } from "./paths.js";
 import { readTemplate } from "./templates.js";
 import { parseFrontmatter, setModelInContent } from "./frontmatter.js";
+import { PROFILE_MARKER } from "./profiles.js";
 
 const FIXTURE_DIR = join(import.meta.dirname, "__fixtures__", "agents");
 
@@ -275,6 +278,157 @@ describe("addManagedMarker", () => {
     const result = addManagedMarker(content);
     const markerCount = result.split(MANAGED_MARKER).length - 1;
     expect(markerCount).toBe(1);
+  });
+});
+
+describe("generic custom-agent reconciliation", () => {
+  it("plans every packaged custom agent as a canonical create", () => {
+    for (const agent of listCustomManagedAgents()) {
+      const target = fixtureTarget();
+      const plan = planCustomAgentReconciliation(agent.name, target, {
+        profiles: [],
+      });
+
+      expect(plan?.name).toBe(agent.name);
+      expect(plan?.action).toBe("create");
+      expect(plan?.expectedContent).toContain(MANAGED_MARKER);
+    }
+  });
+
+  it("replaces marked drift while preserving the exact model and regenerating profiles", () => {
+    const target = fixtureTarget();
+    const installed = addManagedMarker(
+      setModelInContent(readTemplate("developer"), "provider/model #pinned")
+        .replace(
+          PROFILE_MARKER,
+          `${PROFILE_MARKER}
+    # BEGIN optional profile: python
+    "old-python*": "deny"
+    # END optional profile: python`
+        )
+        .replace(MANAGED_MARKER, "Legacy marked drift.\n" + MANAGED_MARKER)
+    );
+    writeAgentFile(target.agentDir, "developer", installed);
+
+    const plan = planCustomAgentReconciliation("developer", target, {
+      profiles: ["python"],
+    });
+
+    expect(plan?.action).toBe("replace");
+    expect(plan?.expectedContent).toContain("model: \"provider/model #pinned\"");
+    expect(plan?.expectedContent).toContain('"pytest*": "allow"');
+    expect(plan?.expectedContent).not.toContain("old-python");
+    expect(plan?.expectedContent).not.toContain("Legacy marked drift");
+
+    expect(applyCustomAgentReconciliation(plan!, target)).toBe("replace");
+    const replaced = readFileSync(plan!.path, "utf-8");
+    expect(parseFrontmatter(replaced).frontmatter.model).toBe(
+      "provider/model #pinned"
+    );
+    expect(replaced.match(/# BEGIN optional profile: python/g)).toHaveLength(1);
+  });
+
+  it("preserves the newest valid model when apply revalidates a plan", () => {
+    const target = fixtureTarget();
+    installCustomAgent("developer", target);
+    writeAgentFile(
+      target.agentDir,
+      "developer",
+      setModelInContent(
+        readFileSync(join(target.agentDir, "developer.md"), "utf-8"),
+        "old/provider-model"
+      ).replace(MANAGED_MARKER, "Legacy developer drift.\n" + MANAGED_MARKER)
+    );
+    const plan = planCustomAgentReconciliation("developer", target, {
+      profiles: [],
+    });
+    expect(plan?.action).toBe("replace");
+
+    const newer = setModelInContent(
+      readFileSync(plan!.path, "utf-8"),
+      "new/provider-model"
+    );
+    writeAgentFile(target.agentDir, "developer", newer);
+
+    expect(applyCustomAgentReconciliation(plan!, target)).toBe("replace");
+    expect(parseFrontmatter(readFileSync(plan!.path, "utf-8")).frontmatter.model).toBe(
+      "new/provider-model"
+    );
+  });
+
+  it("treats invalid model and malformed frontmatter as conflicts", () => {
+    const target = fixtureTarget();
+    writeAgentFile(
+      target.agentDir,
+      "developer",
+      addManagedMarker(readTemplate("developer").replace("mode: primary", "mode: primary\nmodel: \"\""))
+    );
+    const invalidModel = planCustomAgentReconciliation("developer", target);
+    expect(invalidModel?.action).toBe("conflict");
+
+    const malformed = `${MANAGED_MARKER}\n---\nmodel: [broken\n---\n`;
+    writeAgentFile(target.agentDir, "developer", malformed);
+    const invalidFrontmatter = planCustomAgentReconciliation("developer", target);
+    expect(invalidFrontmatter?.action).toBe("conflict");
+    expect(readFileSync(invalidFrontmatter!.path, "utf-8")).toBe(malformed);
+  });
+
+  it("removes only marked custom agents and leaves unmarked conflicts intact", () => {
+    const target = fixtureTarget();
+    installCustomAgent("developer", target);
+    const removePlan = planCustomAgentReconciliation("developer", target, {
+      desired: false,
+    });
+    expect(removePlan?.action).toBe("remove");
+    expect(applyCustomAgentReconciliation(removePlan!, target)).toBe("remove");
+    expect(existsSync(join(target.agentDir, "developer.md"))).toBe(false);
+
+    const manual = "# manual developer\n";
+    writeAgentFile(target.agentDir, "developer", manual);
+    const conflictPlan = planCustomAgentReconciliation("developer", target, {
+      desired: false,
+    });
+    expect(conflictPlan?.action).toBe("conflict");
+    expect(readFileSync(join(target.agentDir, "developer.md"), "utf-8")).toBe(manual);
+  });
+
+  it.each([
+    [
+      "invalid model",
+      addManagedMarker(
+        readTemplate("developer").replace(
+          "mode: primary",
+          "mode: primary\nmodel: \"\""
+        )
+      ),
+    ],
+    ["malformed frontmatter", `${MANAGED_MARKER}\n---\nmodel: [broken\n---\n`],
+  ])("does not remove marked agents with %s", (_label, content) => {
+    const target = fixtureTarget();
+    writeAgentFile(target.agentDir, "developer", content);
+    const plan = planCustomAgentReconciliation("developer", target, {
+      desired: false,
+    });
+
+    expect(plan?.action).toBe("conflict");
+    expect(applyCustomAgentReconciliation(plan!, target)).toBe("conflict");
+    expect(readFileSync(join(target.agentDir, "developer.md"), "utf-8")).toBe(content);
+  });
+
+  it("is unchanged after applying the same canonical target twice", () => {
+    const target = fixtureTarget();
+    const createPlan = planCustomAgentReconciliation("developer", target, {
+      profiles: ["python"],
+      model: "provider/model",
+    });
+    expect(applyCustomAgentReconciliation(createPlan!, target)).toBe("create");
+
+    const secondPlan = planCustomAgentReconciliation("developer", target, {
+      profiles: ["python"],
+      model: "provider/model",
+    });
+    expect(secondPlan?.action).toBe("unchanged");
+    expect(applyCustomAgentReconciliation(secondPlan!, target)).toBe("unchanged");
   });
 });
 

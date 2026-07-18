@@ -1,16 +1,16 @@
-# Graph Report - opencode-workflow  (2026-07-18)
+# Graph Report - opencode-workflow  (2026-07-17)
 
 ## Corpus Check
-- 120 files · ~201,773 words
+- 117 files · ~182,580 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 3375 nodes · 4181 edges · 295 communities (285 shown, 10 thin omitted)
-- Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 5 edges (avg confidence: 0.5)
+- 3007 nodes · 3765 edges · 252 communities (242 shown, 10 thin omitted)
+- Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 4 edges (avg confidence: 0.5)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `a071f3ce`
+- Built from commit: `c4179105`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -265,61 +265,18 @@
 - 2026-07-17 — Auditor — Final closure audit
 - 2026-07-17 — Auditor — Final correction re-audit
 - Tasks: Pre-Commit Responsibility Boundary
-- 2026-07-18 — Architect — Version 0.6.3 amendment added
-- 2026-07-18 — Architect — Local implementation handoff created
-- 2026-07-18 — Auditor — Independent local closure audit
-- 2026-07-18 — Developer — T-001 complete
-- 2026-07-18 — Developer — T-002 complete
-- 2026-07-18 — Developer — T-003 complete / CP-01 ready for review
-- 2026-07-18 — Reviewer — Auditor follow-up review FAIL
-- 2026-07-18 — Reviewer — Config result follow-up review FAIL
-- 2026-07-18 — Reviewer — CP-01 FAIL
-- 2026-07-18 — Developer — Auditor minor findings fixed
-- 2026-07-18 — Developer — T-004 complete / T-005 in progress
-- 2026-07-18 — Reviewer — CP-01 PASS
-- 2026-07-18 — Reviewer — CP-01 re-review FAIL
-- 2026-07-18 — Reviewer — CP-02 FAIL
-- 2026-07-18 — Reviewer — CP-02 fifth re-review FAIL
-- 2026-07-18 — Reviewer — CP-02 fourth re-review FAIL
-- 2026-07-18 — Reviewer — CP-02 re-review FAIL
-- 2026-07-18 — Reviewer — CP-02 re-review FAIL
-- 2026-07-18 — Reviewer — CP-02 second re-review FAIL
-- 2026-07-18 — Reviewer — CP-02 seventh re-review FAIL
-- 2026-07-18 — Reviewer — CP-02 sixth re-review FAIL
-- 2026-07-18 — Reviewer — CP-02 third re-review FAIL
-- 2026-07-18 — Reviewer — CP-03 first final review FAIL
-- Tasks: Declarative Init Reconciliation
-- 2026-07-18 — Developer — Config apply result coverage completed
-- 2026-07-18 — Developer — Config result traceability fixed
-- 2026-07-18 — Developer — CP-01 finding fixed
-- 2026-07-18 — Developer — CP-02 bulk built-in partial-result finding fixed
-- 2026-07-18 — Developer — CP-02 findings fixed
-- 2026-07-18 — Developer — T-005 complete / CP-02 ready for review
-- 2026-07-18 — Reviewer — CP-02 PASS
-- 2026-07-18 — Reviewer — CP-03 PASS
-- 2026-07-18 — Reviewer — CP-04 PASS
-- 2026-07-18 — Developer — CP-02 Graphify result/restart fix
-- 2026-07-18 — Developer — CP-02 re-review validation rerun
-- 2026-07-18 — Developer — CP-02 replacement/restore transparency fixed
-- 2026-07-18 — Developer — CP-02 restart invariant completed
-- 2026-07-18 — Developer — CP-02 result/restart completeness fixed
-- 2026-07-18 — Developer — CP-03 documentation correction validated
-- 2026-07-18 — Developer — T-006 complete / T-007 in progress
-- 2026-07-18 — Developer — T-007 validation complete / CP-03 ready for review
-- 2026-07-18 — Developer — T-008 complete / CP-04 ready for review
-- 2026-07-18 — Reviewer — Config result coverage re-review PASS
 
 ## God Nodes (most connected - your core abstractions)
-1. `Log` - 49 edges
-2. `2026-06-21 00:00 — Developer — Reviewer fix round 3: final CP-01/CP-03 remediations` - 42 edges
-3. `initCommand()` - 38 edges
-4. `Log` - 33 edges
-5. `Log` - 22 edges
-6. `agentsCommand()` - 20 edges
-7. `modelsCommand()` - 20 edges
-8. `skillsCommand()` - 20 edges
-9. `profilesCommand()` - 19 edges
-10. `uninstallCommand()` - 18 edges
+1. `2026-06-21 00:00 — Developer — Reviewer fix round 3: final CP-01/CP-03 remediations` - 42 edges
+2. `initCommand()` - 38 edges
+3. `Log` - 33 edges
+4. `Log` - 22 edges
+5. `agentsCommand()` - 20 edges
+6. `modelsCommand()` - 20 edges
+7. `skillsCommand()` - 20 edges
+8. `profilesCommand()` - 19 edges
+9. `uninstallCommand()` - 18 edges
+10. `resolveTarget()` - 17 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `parseFrontmatter()` --references--> `yaml`  [EXTRACTED]
@@ -330,45 +287,45 @@
   src/lib/frontmatter.ts → package.json
 - `GraphifyOptions` --inherits--> `GlobalProjectOptions`  [EXTRACTED]
   src/commands/graphify.ts → src/lib/ui.ts
-- `agentsCommand()` --calls--> `applyAgentChanges()`  [EXTRACTED]
-  src/commands/agents.ts → src/lib/agents.ts
+- `ScopeContext` --references--> `InstallTarget`  [EXTRACTED]
+  src/lib/ui.ts → src/lib/paths.ts
 
 ## Import Cycles
 - None detected.
 
-## Communities (295 total, 10 thin omitted)
+## Communities (252 total, 10 thin omitted)
 
 ### Community 0 - "skills.ts"
-Cohesion: 0.09
-Nodes (55): ALL_MANAGED_SKILLS, CORE_SKILLS, CoreSkillName, detectDefaultScope(), GRAPHIFY_SKILLS, GraphifySkillName, isCoreSkill(), isGraphifySkill() (+47 more)
+Cohesion: 0.10
+Nodes (48): target, ALL_MANAGED_SKILLS, CORE_SKILLS, CoreSkillName, detectDefaultScope(), GRAPHIFY_SKILLS, GraphifySkillName, isCoreSkill() (+40 more)
 
 ### Community 1 - "initCommand"
-Cohesion: 0.14
-Nodes (44): program, agentsCommand(), AgentsResult, buildAgentSummary(), getCurrentModel(), hasActiveManagedAgents(), modelsCommand(), promptCustomModel() (+36 more)
+Cohesion: 0.18
+Nodes (34): program, agentsCommand(), AgentsResult, buildAgentSummary(), buildPlanSummary(), buildResultSummary(), getActivePatchableAgents(), PATCHABLE_DEFS (+26 more)
 
 ### Community 2 - "package.json"
 Cohesion: 0.04
 Nodes (46): commander, @inquirer/prompts, bin, opencode-path, dependencies, commander, @inquirer/prompts, picocolors (+38 more)
 
 ### Community 3 - "profiles.ts"
-Cohesion: 0.11
-Nodes (30): applyProfileToAgents(), composeProfilesIntoContent(), describeProfileState(), DiscoveredProfileState, discoverProfileState(), discoverRecognizedProfileNames(), generateCanonicalProfileSnippets(), generateSnippet() (+22 more)
+Cohesion: 0.12
+Nodes (23): applyProfileToAgents(), generateSnippet(), getProfile(), GO_DEV, GO_READONLY, insertProfileIntoFile(), InsertProfileResult, JAVA_KOTLIN_DEV (+15 more)
 
 ### Community 4 - "init.test.ts"
-Cohesion: 0.08
-Nodes (39): yaml, chdirToFixture(), CORE_SKILL_NAMES, EXIT_PROMPT_ERROR, setupProjectFixture(), writeArchitectureDrift(), writeMarkedDeveloperDrift(), chdirToFixture() (+31 more)
+Cohesion: 0.09
+Nodes (28): chdirToFixture(), EXIT_PROMPT_ERROR, setupProjectFixture(), chdirToFixture(), CORE_SKILL_NAMES, EXIT_PROMPT_ERROR, setupProjectFixture(), writeArchitectureDrift() (+20 more)
 
 ### Community 5 - "agents.ts"
-Cohesion: 0.08
-Nodes (42): target, InitPlan, AgentApplyError, AgentApplyFailure, AgentApplyResult, AgentChanges, applyArchitectReconciliation(), applyCustomAgentReconciliation() (+34 more)
+Cohesion: 0.13
+Nodes (31): InitPlan, AgentApplyResult, AgentChanges, applyAgentChanges(), applyArchitectReconciliation(), ArchitectReconciliation, ArchitectReconciliationAction, BUILTIN_MANAGED_AGENTS (+23 more)
 
 ### Community 6 - "ui.ts"
-Cohesion: 0.07
-Nodes (36): chdirToFixture(), EXIT_PROMPT_ERROR, setupProjectFixture(), chdirToFixture(), CORE_SKILL_NAMES, setupProjectFixture(), ManagedAgentState, InstallScope (+28 more)
+Cohesion: 0.11
+Nodes (24): AgentRowOptions, appendCancel(), applyPhaseCheckpoint(), checkApplyPhaseSigint(), CheckboxChoice, globalSigintHandler(), isCancelValue(), isExitPromptError() (+16 more)
 
 ### Community 7 - "graphify.ts"
-Cohesion: 0.21
-Nodes (19): graphifyCommand(), GraphifyOptions, execFilePromise(), getGraphifyGitCommit(), getGraphifyGitDirty(), getGraphifyStatePath(), getGraphifyVersion(), GraphifyState (+11 more)
+Cohesion: 0.20
+Nodes (20): graphifyCommand(), GraphifyOptions, applyPlan(), execFilePromise(), getGraphifyGitCommit(), getGraphifyGitDirty(), getGraphifyStatePath(), getGraphifyVersion() (+12 more)
 
 ### Community 8 - "compilerOptions"
 Cohesion: 0.09
@@ -411,8 +368,8 @@ Cohesion: 0.07
 Nodes (29): `agents`, Cancellation, Commands, Complete uninstall, Concepts, Conflict detection, Contributing, Exit codes (+21 more)
 
 ### Community 22 - "frontmatter.ts"
-Cohesion: 0.08
-Nodes (25): 2026-07-18 — Developer — CP-02 Graphify failure finding fixed, 2026-07-18 — Developer — CP-02 interruption reporting fixed, 2026-07-18 — Developer — CP-02 real bulk failure regression added, 2026-07-18 — Developer — T-008 version declarations updated, 2026-07-18 — User decision — CP-01 scope exception resolved, 2026-07-18 — User — T-008 implementation authorized, Current Status, Current Status (+17 more)
+Cohesion: 0.17
+Nodes (20): yaml, setCurrentModel(), getAgentModel(), isValidAgentModel(), ParsedFrontmatter, parseFrontmatter(), readAgentFile(), serializeYamlScalar() (+12 more)
 
 ### Community 23 - "Brief: Architect Kernel and Exclusive Architecture Playbooks"
 Cohesion: 0.07
@@ -447,8 +404,8 @@ Cohesion: 0.10
 Nodes (19): Acceptance Criteria, Assumptions and residual risks, Brief: Contractual Handoff with Risk-Based Checkpoints, Constraints, Contracts / invariants / compatibility to preserve, Decisions, Do not touch / do not introduce, Edge cases (+11 more)
 
 ### Community 31 - "init.ts"
-Cohesion: 0.13
-Nodes (25): buildConsolidatedSummary(), ConfigApplyAction, ConfigReconciliation, ConfigReconciliationAction, getCurrentModel(), hasPlannedChanges(), InitApplyError, InitApplyResult (+17 more)
+Cohesion: 0.15
+Nodes (22): buildConsolidatedSummary(), getActivePatchableAgents(), getCurrentModel(), hasPlannedChanges(), InitApplyResult, initCommand(), PATCHABLE_DEFS, printArchitectureUnchanged() (+14 more)
 
 ### Community 32 - "Cross-Repo Architecture"
 Cohesion: 0.11
@@ -467,8 +424,8 @@ Cohesion: 0.14
 Nodes (14): 2026-06-19 — Developer — T-001 inspection (no source diff), Current Status, Current Task, Decisions Made, Do Not Touch, Files Touched, Findings — selected insertion points (for T-002), Notes for Next Session (+6 more)
 
 ### Community 36 - "config.ts"
-Cohesion: 0.29
-Nodes (14): applyPlan(), setCurrentModel(), applyAgentChanges(), hideBuiltinAgent(), restoreBuiltinAgent(), createOrMergeConfig(), ensureConfigStructure(), getConfigAgentModel() (+6 more)
+Cohesion: 0.33
+Nodes (12): hideBuiltinAgent(), restoreBuiltinAgent(), createOrMergeConfig(), ensureConfigStructure(), getConfigAgentModel(), getExploreModel(), OpenCodeConfig, readConfig() (+4 more)
 
 ### Community 37 - "2026-06-18 21:44 — Developer — Reviewer PASS, all five tasks done"
 Cohesion: 0.15
@@ -899,8 +856,8 @@ Cohesion: 0.18
 Nodes (11): 2026-06-19 17:00 — Developer — Re-audit fixes (T-009 / AC-07, AC-13; T-010 / AC-27, AC-34), Current Status, Current Task, Decisions Made, Post-Reviewer Fixes, Reviewer Verdict, Validation Missing, Validation Run (+3 more)
 
 ### Community 144 - "models.ts"
-Cohesion: 0.10
-Nodes (20): Acceptance Criteria, Assumptions and residual risks, Brief: Declarative Init Reconciliation, Constraints, Contracts / invariants / compatibility to preserve, Decisions, Decisions already made, Do not touch / do not introduce (+12 more)
+Cohesion: 0.35
+Nodes (10): getCurrentModel(), hasActiveManagedAgents(), modelsCommand(), promptCustomModel(), promptModelFromOpenCode(), setCurrentModel(), listActiveManagedModelAgents(), buildAgentRow() (+2 more)
 
 ### Community 145 - "research.md"
 Cohesion: 0.18
@@ -999,8 +956,8 @@ Cohesion: 0.22
 Nodes (9): 2026-06-19 15:05 — Developer — Audit findings fix (AC-07, AC-12, AC-13, AC-22, AC-27, AC-34, AC-36), Current Status, Current Task, Decisions Made, Reviewer Verdict, Validation Missing, Validation Run, What Changed (+1 more)
 
 ### Community 169 - "Log"
-Cohesion: 0.25
-Nodes (7): 2026-06-21 — Auditor — Re-check of Reviewer traceability fix, Log, Progress: Contractual Handoff with Risk-Based Checkpoints, Scope, Validation Run, Verdict, Verification
+Cohesion: 0.40
+Nodes (5): 2026-06-21 — Auditor — Re-check of Reviewer traceability fix, Scope, Validation Run, Verdict, Verification
 
 ### Community 170 - "2026-07-10 — Developer — Additional Graphify documentation review for escalation"
 Cohesion: 0.25
@@ -1171,8 +1128,8 @@ Cohesion: 0.33
 Nodes (5): Auditor notes, Coverage notes, Status legend, Task table, Tasks: Worktree Isolation for Parallel Features
 
 ### Community 212 - "2026-06-21 — Developer — Auditor finding resolution: Reviewer traceability evidence added"
-Cohesion: 0.40
-Nodes (5): 2026-06-21 — Developer — Auditor finding resolution: Reviewer traceability evidence added, Chain Verification, Reviewer Evidence Summary, What Remains, What Was Done
+Cohesion: 0.25
+Nodes (7): 2026-06-21 — Developer — Auditor finding resolution: Reviewer traceability evidence added, Chain Verification, Log, Progress: Contractual Handoff with Risk-Based Checkpoints, Reviewer Evidence Summary, What Remains, What Was Done
 
 ### Community 213 - "Tasks: Improve Auditor Agent Prompt B-lite"
 Cohesion: 0.40
@@ -1298,180 +1255,8 @@ Nodes (10): 2026-07-17 — Auditor — Final correction re-audit, Anti-Bloat Res
 Cohesion: 0.25
 Nodes (7): Auditor notes, Checkpoints, Coverage notes, Start gate for implementation, Status legend, Task table, Tasks: Pre-Commit Responsibility Boundary
 
-### Community 252 - "2026-07-18 — Architect — Version 0.6.3 amendment added"
-Cohesion: 0.17
-Nodes (12): 2026-07-18 — Architect — Version 0.6.3 amendment added, Current Status, Current Task, Decisions Made, Do Not Touch, Files Touched, Notes for Next Session, Validation Missing (+4 more)
-
-### Community 253 - "2026-07-18 — Architect — Local implementation handoff created"
-Cohesion: 0.18
-Nodes (11): 2026-07-18 — Architect — Local implementation handoff created, Current Status, Current Task, Decisions Made, Files Touched, Notes for Next Session, Validation Missing, Validation Run (+3 more)
-
-### Community 254 - "2026-07-18 — Auditor — Independent local closure audit"
-Cohesion: 0.25
-Nodes (8): 2026-07-18 — Auditor — Independent local closure audit, Anti-bloat Audit, Claims Verified, Findings, Not Checked, Primary Validation Run, Scope, Verdict
-
-### Community 255 - "2026-07-18 — Developer — T-001 complete"
-Cohesion: 0.25
-Nodes (8): 2026-07-18 — Developer — T-001 complete, Current Status, Current Task, Files Touched, Recovery Notes, Validation Missing, Validation Run, What Was Attempted
-
-### Community 256 - "2026-07-18 — Developer — T-002 complete"
-Cohesion: 0.25
-Nodes (8): 2026-07-18 — Developer — T-002 complete, Current Status, Current Task, Files Touched, Recovery Notes, Validation Missing, Validation Run, What Was Attempted
-
-### Community 257 - "2026-07-18 — Developer — T-003 complete / CP-01 ready for review"
-Cohesion: 0.25
-Nodes (8): 2026-07-18 — Developer — T-003 complete / CP-01 ready for review, Current Status, Current Task, Files Touched, Recovery Notes, Validation Missing, Validation Run, What Was Attempted
-
-### Community 258 - "2026-07-18 — Reviewer — Auditor follow-up review FAIL"
-Cohesion: 0.25
-Nodes (8): 2026-07-18 — Reviewer — Auditor follow-up review FAIL, Evidence, Finding, Impact, Proposed options, Status, Task / checkpoint, Verdict
-
-### Community 259 - "2026-07-18 — Reviewer — Config result follow-up review FAIL"
-Cohesion: 0.25
-Nodes (8): 2026-07-18 — Reviewer — Config result follow-up review FAIL, Evidence, Findings, Impact, Proposed options, Status, Task / checkpoint, Verdict
-
-### Community 260 - "2026-07-18 — Reviewer — CP-01 FAIL"
-Cohesion: 0.25
-Nodes (8): 2026-07-18 — Reviewer — CP-01 FAIL, Evidence, Finding, Impact, Proposed options, Status, Task / checkpoint, Verdict
-
-### Community 261 - "2026-07-18 — Developer — Auditor minor findings fixed"
-Cohesion: 0.29
-Nodes (7): 2026-07-18 — Developer — Auditor minor findings fixed, Current Status, Current Task, Files Touched, Validation Missing, Validation Run, What Changed
-
-### Community 262 - "2026-07-18 — Developer — T-004 complete / T-005 in progress"
-Cohesion: 0.29
-Nodes (7): 2026-07-18 — Developer — T-004 complete / T-005 in progress, Current Status, Current Task, Recovery Notes, Validation Missing, Validation Run, What Was Attempted
-
-### Community 263 - "2026-07-18 — Reviewer — CP-01 PASS"
-Cohesion: 0.29
-Nodes (7): 2026-07-18 — Reviewer — CP-01 PASS, Do Not Touch, Evidence, Findings, Next Task, Scope, Verdict
-
-### Community 264 - "2026-07-18 — Reviewer — CP-01 re-review FAIL"
-Cohesion: 0.29
-Nodes (7): 2026-07-18 — Reviewer — CP-01 re-review FAIL, Evidence, Impact, Problem, Proposed options, Status, Task / checkpoint
-
-### Community 265 - "2026-07-18 — Reviewer — CP-02 FAIL"
-Cohesion: 0.29
-Nodes (7): 2026-07-18 — Reviewer — CP-02 FAIL, Evidence, Impact, Problem, Proposed options, Status, Task / checkpoint
-
-### Community 266 - "2026-07-18 — Reviewer — CP-02 fifth re-review FAIL"
-Cohesion: 0.29
-Nodes (7): 2026-07-18 — Reviewer — CP-02 fifth re-review FAIL, Evidence, Impact, Problem, Proposed options, Status, Task / checkpoint
-
-### Community 267 - "2026-07-18 — Reviewer — CP-02 fourth re-review FAIL"
-Cohesion: 0.29
-Nodes (7): 2026-07-18 — Reviewer — CP-02 fourth re-review FAIL, Evidence, Impact, Problem, Proposed options, Status, Task / checkpoint
-
-### Community 268 - "2026-07-18 — Reviewer — CP-02 re-review FAIL"
-Cohesion: 0.29
-Nodes (7): 2026-07-18 — Reviewer — CP-02 re-review FAIL, Evidence, Impact, Problem, Proposed options, Status, Task / checkpoint
-
-### Community 269 - "2026-07-18 — Reviewer — CP-02 re-review FAIL"
-Cohesion: 0.29
-Nodes (7): 2026-07-18 — Reviewer — CP-02 re-review FAIL, Evidence, Impact, Problem, Proposed options, Status, Task / checkpoint
-
-### Community 270 - "2026-07-18 — Reviewer — CP-02 second re-review FAIL"
-Cohesion: 0.29
-Nodes (7): 2026-07-18 — Reviewer — CP-02 second re-review FAIL, Evidence, Impact, Problem, Proposed options, Status, Task / checkpoint
-
-### Community 271 - "2026-07-18 — Reviewer — CP-02 seventh re-review FAIL"
-Cohesion: 0.29
-Nodes (7): 2026-07-18 — Reviewer — CP-02 seventh re-review FAIL, Evidence, Impact, Problem, Proposed options, Status, Task / checkpoint
-
-### Community 272 - "2026-07-18 — Reviewer — CP-02 sixth re-review FAIL"
-Cohesion: 0.29
-Nodes (7): 2026-07-18 — Reviewer — CP-02 sixth re-review FAIL, Evidence, Impact, Problem, Proposed options, Status, Task / checkpoint
-
-### Community 273 - "2026-07-18 — Reviewer — CP-02 third re-review FAIL"
-Cohesion: 0.29
-Nodes (7): 2026-07-18 — Reviewer — CP-02 third re-review FAIL, Evidence, Impact, Problem, Proposed options, Status, Task / checkpoint
-
-### Community 274 - "2026-07-18 — Reviewer — CP-03 first final review FAIL"
-Cohesion: 0.29
-Nodes (7): 2026-07-18 — Reviewer — CP-03 first final review FAIL, Evidence, Impact, Problem, Proposed options, Status, Task / checkpoint
-
-### Community 275 - "Tasks: Declarative Init Reconciliation"
-Cohesion: 0.29
-Nodes (6): Auditor notes, Checkpoints, Coverage notes, Status legend, Task table, Tasks: Declarative Init Reconciliation
-
-### Community 276 - "2026-07-18 — Developer — Config apply result coverage completed"
-Cohesion: 0.33
-Nodes (6): 2026-07-18 — Developer — Config apply result coverage completed, Current Status, Current Task, Validation Missing, Validation Run, What Changed
-
-### Community 277 - "2026-07-18 — Developer — Config result traceability fixed"
-Cohesion: 0.33
-Nodes (6): 2026-07-18 — Developer — Config result traceability fixed, Current Status, Current Task, Validation Missing, Validation Run, What Changed
-
-### Community 278 - "2026-07-18 — Developer — CP-01 finding fixed"
-Cohesion: 0.33
-Nodes (6): 2026-07-18 — Developer — CP-01 finding fixed, Current Status, Current Task, Validation Missing, Validation Run, What Was Attempted
-
-### Community 279 - "2026-07-18 — Developer — CP-02 bulk built-in partial-result finding fixed"
-Cohesion: 0.33
-Nodes (6): 2026-07-18 — Developer — CP-02 bulk built-in partial-result finding fixed, Current Status, Current Task, Files Touched, Validation Missing, Validation Run
-
-### Community 280 - "2026-07-18 — Developer — CP-02 findings fixed"
-Cohesion: 0.33
-Nodes (6): 2026-07-18 — Developer — CP-02 findings fixed, Current Status, Current Task, Validation Missing, Validation Run, What Was Attempted
-
-### Community 281 - "2026-07-18 — Developer — T-005 complete / CP-02 ready for review"
-Cohesion: 0.33
-Nodes (6): 2026-07-18 — Developer — T-005 complete / CP-02 ready for review, Coverage Evidence, Current Status, Current Task, Validation Missing, Validation Run
-
-### Community 282 - "2026-07-18 — Reviewer — CP-02 PASS"
-Cohesion: 0.33
-Nodes (6): 2026-07-18 — Reviewer — CP-02 PASS, Evidence, Findings, Next Task, Task / checkpoint, Verdict
-
-### Community 283 - "2026-07-18 — Reviewer — CP-03 PASS"
-Cohesion: 0.33
-Nodes (6): 2026-07-18 — Reviewer — CP-03 PASS, Evidence, Final Status, Findings, Task / checkpoint, Verdict
-
-### Community 284 - "2026-07-18 — Reviewer — CP-04 PASS"
-Cohesion: 0.33
-Nodes (6): 2026-07-18 — Reviewer — CP-04 PASS, Evidence, Final Status, Findings, Task / checkpoint, Verdict
-
-### Community 285 - "2026-07-18 — Developer — CP-02 Graphify result/restart fix"
-Cohesion: 0.40
-Nodes (5): 2026-07-18 — Developer — CP-02 Graphify result/restart fix, Current Status, Current Task, Validation Missing, Validation Run
-
-### Community 286 - "2026-07-18 — Developer — CP-02 re-review validation rerun"
-Cohesion: 0.40
-Nodes (5): 2026-07-18 — Developer — CP-02 re-review validation rerun, Current Status, Current Task, Validation Missing, Validation Run
-
-### Community 287 - "2026-07-18 — Developer — CP-02 replacement/restore transparency fixed"
-Cohesion: 0.40
-Nodes (5): 2026-07-18 — Developer — CP-02 replacement/restore transparency fixed, Current Status, Current Task, Validation Missing, Validation Run
-
-### Community 288 - "2026-07-18 — Developer — CP-02 restart invariant completed"
-Cohesion: 0.40
-Nodes (5): 2026-07-18 — Developer — CP-02 restart invariant completed, Current Status, Current Task, Validation Missing, Validation Run
-
-### Community 289 - "2026-07-18 — Developer — CP-02 result/restart completeness fixed"
-Cohesion: 0.40
-Nodes (5): 2026-07-18 — Developer — CP-02 result/restart completeness fixed, Current Status, Current Task, Validation Missing, Validation Run
-
-### Community 290 - "2026-07-18 — Developer — CP-03 documentation correction validated"
-Cohesion: 0.40
-Nodes (5): 2026-07-18 — Developer — CP-03 documentation correction validated, Current Status, Current Task, Validation Missing, Validation Run
-
-### Community 291 - "2026-07-18 — Developer — T-006 complete / T-007 in progress"
-Cohesion: 0.40
-Nodes (5): 2026-07-18 — Developer — T-006 complete / T-007 in progress, Current Status, Current Task, Validation Missing, Validation Run
-
-### Community 292 - "2026-07-18 — Developer — T-007 validation complete / CP-03 ready for review"
-Cohesion: 0.40
-Nodes (5): 2026-07-18 — Developer — T-007 validation complete / CP-03 ready for review, Current Status, Current Task, Validation Missing, Validation Run
-
-### Community 293 - "2026-07-18 — Developer — T-008 complete / CP-04 ready for review"
-Cohesion: 0.40
-Nodes (5): 2026-07-18 — Developer — T-008 complete / CP-04 ready for review, Current Status, Current Task, Validation Missing, Validation Run
-
-### Community 294 - "2026-07-18 — Reviewer — Config result coverage re-review PASS"
-Cohesion: 0.40
-Nodes (5): 2026-07-18 — Reviewer — Config result coverage re-review PASS, Evidence, Status, Task / checkpoint, Verdict
-
 ## Knowledge Gaps
-- **2628 isolated node(s):** `$schema`, `.opencode/plugins/graphify.js`, `@opencode-ai/plugin`, `$schema`, `description` (+2623 more)
+- **2337 isolated node(s):** `$schema`, `.opencode/plugins/graphify.js`, `@opencode-ai/plugin`, `$schema`, `description` (+2332 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **10 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -1479,16 +1264,16 @@ Nodes (5): 2026-07-18 — Reviewer — Config result coverage re-review PASS, Ev
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Log` connect `Log` to `2026-07-16 00:00 — Architect — Initial handoff created`, `2026-07-16 19:02 — Developer — T-001 complete; T-002 started`, `2026-07-16 19:05 — Developer — CP-01 implementation complete; Reviewer requested`, `2026-07-16 19:06 — Reviewer — CP-01 PASS`, `2026-07-16 19:12 — Developer — CP-02 implementation complete; Reviewer requested`, `2026-07-16 19:17 — Reviewer — CP-02 PASS`, `2026-07-16 19:24 — Developer — CP-03 implementation complete; final Reviewer requested`, `2026-07-16 19:26 — Reviewer — CP-03 PASS / final feature review`, `2026-07-16 19:39 — Auditor — Final traceability audit FAIL`, `2026-07-16 20:00 — Architect — Auditor FAIL resolved in contract; implementation reopened`, `2026-07-16 20:18 — Developer — T-006 complete; CP-04 Reviewer requested`, `2026-07-16 20:20 — Architect — Explicit refresh superseded by automatic normal-init reconciliation`, `2026-07-16 20:22 — Developer — CP-04 nit resolved; Reviewer recheck requested`, `2026-07-16 20:24 — Reviewer — CP-04 PASS`, `2026-07-16 20:27 — Developer — T-007 complete; T-008 started`, `2026-07-16 20:28 — Developer — T-008 complete; CP-05 Reviewer requested`, `2026-07-16 20:29 — Reviewer — CP-05 PASS`, `2026-07-16 20:30 — Auditor — Architect decision review needs focused follow-up`, `2026-07-16 20:30 — Developer — T-009 started`, `2026-07-16 20:33 — Developer — T-009 complete; CP-06 final Reviewer requested`, `2026-07-16 20:34 — Reviewer — CP-06 PASS / final feature review`, `2026-07-16 20:45 — Architect — Final T-006 semantics bound after focused audit`, `2026-07-16 20:50 — Auditor — Revised handoff acceptable for Developer`, `2026-07-16 21:00 — Developer — T-006 started`, `2026-07-16 21:20 — Auditor — Final re-audit FAIL`, `2026-07-16 21:30 — Developer — Focused remediation complete; Reviewer requested`, `2026-07-16 21:31 — Reviewer — Focused remediation PASS`, `2026-07-16 21:40 — Auditor — Final re-audit ACCEPTABLE`, `2026-07-16 — Developer — Merge completed; push ready`, `2026-07-16 — Developer — Push blocked by repository rule`, `2026-07-16 — Developer — Push rejected; recovery frozen`, `2026-07-16 — Developer — Remote divergence identified`?**
-  _High betweenness centrality (0.010) - this node is a cross-community bridge._
-- **Why does `Log` connect `frontmatter.ts` to `2026-07-18 — Developer — T-002 complete`, `2026-07-18 — Developer — T-003 complete / CP-01 ready for review`, `2026-07-18 — Reviewer — Auditor follow-up review FAIL`, `2026-07-18 — Reviewer — Config result follow-up review FAIL`, `2026-07-18 — Reviewer — CP-01 FAIL`, `2026-07-18 — Developer — Auditor minor findings fixed`, `2026-07-18 — Developer — T-004 complete / T-005 in progress`, `2026-07-18 — Reviewer — CP-01 PASS`, `2026-07-18 — Reviewer — CP-01 re-review FAIL`, `2026-07-18 — Reviewer — CP-02 FAIL`, `2026-07-18 — Reviewer — CP-02 fifth re-review FAIL`, `2026-07-18 — Reviewer — CP-02 fourth re-review FAIL`, `2026-07-18 — Reviewer — CP-02 re-review FAIL`, `2026-07-18 — Reviewer — CP-02 re-review FAIL`, `2026-07-18 — Reviewer — CP-02 second re-review FAIL`, `2026-07-18 — Reviewer — CP-02 seventh re-review FAIL`, `2026-07-18 — Reviewer — CP-02 sixth re-review FAIL`, `2026-07-18 — Reviewer — CP-02 third re-review FAIL`, `2026-07-18 — Reviewer — CP-03 first final review FAIL`, `2026-07-18 — Developer — Config apply result coverage completed`, `2026-07-18 — Developer — Config result traceability fixed`, `2026-07-18 — Developer — CP-01 finding fixed`, `2026-07-18 — Developer — CP-02 bulk built-in partial-result finding fixed`, `2026-07-18 — Developer — CP-02 findings fixed`, `2026-07-18 — Developer — T-005 complete / CP-02 ready for review`, `2026-07-18 — Reviewer — CP-02 PASS`, `2026-07-18 — Reviewer — CP-03 PASS`, `2026-07-18 — Reviewer — CP-04 PASS`, `2026-07-18 — Developer — CP-02 Graphify result/restart fix`, `2026-07-18 — Developer — CP-02 re-review validation rerun`, `2026-07-18 — Developer — CP-02 replacement/restore transparency fixed`, `2026-07-18 — Developer — CP-02 restart invariant completed`, `2026-07-18 — Developer — CP-02 result/restart completeness fixed`, `2026-07-18 — Developer — CP-03 documentation correction validated`, `2026-07-18 — Developer — T-006 complete / T-007 in progress`, `2026-07-18 — Developer — T-007 validation complete / CP-03 ready for review`, `2026-07-18 — Developer — T-008 complete / CP-04 ready for review`, `2026-07-18 — Reviewer — Config result coverage re-review PASS`, `2026-07-18 — Architect — Version 0.6.3 amendment added`, `2026-07-18 — Architect — Local implementation handoff created`, `2026-07-18 — Auditor — Independent local closure audit`, `2026-07-18 — Developer — T-001 complete`?**
-  _High betweenness centrality (0.009) - this node is a cross-community bridge._
+  _High betweenness centrality (0.011) - this node is a cross-community bridge._
 - **Why does `Log` connect `Log` to `2026-07-16 00:00 — Architect — Initial handoff created`, `2026-07-16 00:01 — Architect — Interim audit findings resolved contractually`, `2026-07-17 — Developer — CP-01 implementation complete; Reviewer requested`, `2026-07-17 — Developer — CP-02 implementation complete; Reviewer requested`, `2026-07-17 — Developer — Final-Auditor correction validation complete; Reviewer re-check requested`, `2026-07-17 — Developer — Final-Auditor major finding correction implemented`, `2026-07-17 — Developer — Final-Auditor major finding correction started`, `2026-07-17 — Developer — T-001 complete; T-002 started`, `2026-07-17 — Developer — T-001 start gate satisfied`, `2026-07-17 — Developer — T-003 complete; T-004 started`, `2026-07-17 — Developer — T-003 started`, `2026-07-17 — Developer — T-005 baseline recheck and start`, `2026-07-17 — Developer — T-005 complete; T-006 started`, `2026-07-17 — Developer — T-006 complete; CP-03 final Reviewer requested`, `2026-07-17 — Reviewer — CP-01 PASS`, `2026-07-17 — Reviewer — CP-02 PASS`, `2026-07-17 — Reviewer — CP-03 PASS / final feature review`, `2026-07-17 — Reviewer — Final-Auditor correction re-check PASS`, `2026-07-17 — Auditor — Final closure audit`, `2026-07-17 — Auditor — Final correction re-audit`?**
-  _High betweenness centrality (0.007) - this node is a cross-community bridge._
+  _High betweenness centrality (0.005) - this node is a cross-community bridge._
+- **Why does `yaml` connect `frontmatter.ts` to `package.json`?**
+  _High betweenness centrality (0.003) - this node is a cross-community bridge._
 - **What connects `$schema`, `.opencode/plugins/graphify.js`, `@opencode-ai/plugin` to the rest of the system?**
-  _2629 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _2338 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `skills.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.08700564971751412 - nodes in this community are weakly interconnected._
-- **Should `initCommand` be split into smaller, more focused modules?**
-  _Cohesion score 0.13951734539969834 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.09643605870020965 - nodes in this community are weakly interconnected._
 - **Should `package.json` be split into smaller, more focused modules?**
   _Cohesion score 0.0425531914893617 - nodes in this community are weakly interconnected._
+- **Should `profiles.ts` be split into smaller, more focused modules?**
+  _Cohesion score 0.11692307692307692 - nodes in this community are weakly interconnected._

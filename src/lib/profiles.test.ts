@@ -8,6 +8,12 @@ import {
   insertProfileIntoFile,
   applyProfileToAgents,
   PROFILE_MARKER,
+  composeProfilesIntoContent,
+  describeProfileState,
+  discoverProfileState,
+  discoverRecognizedProfileNames,
+  generateCanonicalProfileSnippets,
+  normalizeProfileNames,
   type ProfileEntry,
   type PerFileStatus,
 } from "./profiles.js";
@@ -211,6 +217,117 @@ describe("profileExistsInContent", () => {
 
   it("returns false for empty content", () => {
     expect(profileExistsInContent("", "python")).toBe(false);
+  });
+});
+
+describe("profile target-state discovery", () => {
+  it("discovers recognized profiles, ignores unknown blocks, and removes duplicates", () => {
+    const content = `${AGENT_WITH_MARKER}
+    # BEGIN optional profile: python
+    "old-python*": "allow"
+    # END optional profile: python
+    # BEGIN optional profile: unknown
+    "unknown*": "allow"
+    # END optional profile: unknown
+    # BEGIN optional profile: python
+    "duplicate*": "deny"
+    # END optional profile: python
+`;
+
+    expect(discoverRecognizedProfileNames(content)).toEqual(["python"]);
+  });
+
+  it("reports absent, present, and mixed states without choosing a target", () => {
+    expect(describeProfileState([[], []])).toBe("absent");
+    expect(describeProfileState([["python"], ["python"]])).toBe("present");
+    expect(describeProfileState([[], ["python"]])).toBe("mixed");
+    expect(describeProfileState([["go", "python"], ["python", "go"]])).toBe(
+      "present"
+    );
+  });
+
+  it("returns per-agent sets and the ordered union for mixed state", () => {
+    const python = `${AGENT_WITH_MARKER}
+    # BEGIN optional profile: python
+    "pytest*": "allow"
+    # END optional profile: python
+`;
+    const go = `${AGENT_WITH_MARKER}
+    # BEGIN optional profile: go
+    "go test*": "allow"
+    # END optional profile: go
+`;
+
+    expect(discoverProfileState([AGENT_WITH_MARKER, python, go])).toEqual({
+      status: "mixed",
+      profiles: ["python", "go"],
+      perAgent: [[], ["python"], ["go"]],
+    });
+  });
+
+  it("normalizes explicit names to recognized canonical order", () => {
+    expect(normalizeProfileNames(["python", "unknown", "go", "python"])).toEqual([
+      "python",
+      "go",
+    ]);
+  });
+});
+
+describe("canonical profile composition", () => {
+  it("generates snippets using the current bundled definition and variant", () => {
+    const [snippet] = generateCanonicalProfileSnippets(["go"], "readonly");
+
+    expect(snippet).toContain("# BEGIN optional profile: go");
+    expect(snippet).toContain('"go test*": "allow"');
+    expect(snippet).not.toContain('"go fmt*": "ask"');
+  });
+
+  it("replaces stale and duplicate blocks without duplicating profiles", () => {
+    const stale = AGENT_WITH_MARKER.replace(
+      `${PROFILE_MARKER}\n`,
+      `${PROFILE_MARKER}
+    # BEGIN optional profile: python
+    "old-python*": "deny"
+    # END optional profile: python
+    # BEGIN optional profile: python
+    "duplicate-python*": "allow"
+    # END optional profile: python
+    # BEGIN optional profile: unknown
+    "unknown*": "allow"
+    # END optional profile: unknown
+`
+    );
+    const composed = composeProfilesIntoContent(stale, ["python"], "dev");
+
+    expect(composed.match(/# BEGIN optional profile: python/g)).toHaveLength(1);
+    expect(composed).toContain('"pytest*": "allow"');
+    expect(composed).not.toContain("old-python");
+    expect(composed).not.toContain("duplicate-python");
+    expect(composed).not.toContain("unknown*");
+  });
+
+  it("removes all profile blocks for an explicit empty target", () => {
+    const withProfiles = composeProfilesIntoContent(
+      AGENT_WITH_MARKER,
+      ["python", "rust"],
+      "dev"
+    );
+    const composed = composeProfilesIntoContent(withProfiles, [], "dev");
+
+    expect(composed).toContain(PROFILE_MARKER);
+    expect(composed).not.toContain("BEGIN optional profile:");
+    expect(composed).toContain('"git status*": "allow"');
+  });
+
+  it("is idempotent for an already canonical composition", () => {
+    const first = composeProfilesIntoContent(
+      AGENT_WITH_MARKER,
+      ["python", "go"],
+      "dev"
+    );
+    const second = composeProfilesIntoContent(first, ["go", "python"], "dev");
+
+    expect(second).toBe(first);
   });
 });
 

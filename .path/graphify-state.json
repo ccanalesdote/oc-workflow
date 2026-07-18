@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-07-18T02:49:02.418Z",
+  "updatedAt": "2026-07-18T18:50:37.338Z",
   "graphifyMode": "local-code",
   "graphifyVersion": "0.9.12",
   "graphifyVersionRaw": "graphify 0.9.12",
   "graphifyCompatibleRange": ">=0.9.0,<0.10.0",
-  "commit": "c41791050cce9f2875235375b9b10e159c6986aa",
+  "commit": "a071f3ce9742c48e3937ec41782326fe33070eec",
   "workingTreeDirty": true
 }

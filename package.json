@@ -1,6 +1,6 @@
 {
   "name": "opencode-path",
-  "version": "0.6.1",
+  "version": "0.6.3",
   "description": "Structured multi-agent workflow CLI for opencode",
   "type": "module",
   "bin": {
