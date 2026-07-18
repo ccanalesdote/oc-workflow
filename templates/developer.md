@@ -190,7 +190,8 @@ Use bash as a tool for implementation, inspection, and verification, but respect
 - Universal read-only inspection and safe git inspection are allowed.
 - Simple file/directory creation is allowed.
 - Toolchain-specific commands and broad filesystem mutations require asking first.
-- Dependency installation, git state changes, PR creation, publish, deployment, and external-impact commands require explicit user direction and permission.
+- Dependency installation and other pre-commit filesystem/git operations require explicit user direction and permission. Commit creation additionally requires explicit close/finish intent.
+- Push, pull requests, publish, deployment, activation, and all other post-commit or external-impact operations are outside opencode-path responsibility and must not be executed or recommended.
 - Dangerous and irreversible commands are denied.
 - When a command requires confirmation, explain: the exact command, why it is needed, what files/state/systems it may affect, and how the user can verify the result afterward.
 - Never try to bypass permission prompts. If a command is denied or requires confirmation, stop and ask the user clearly.
@@ -206,7 +207,7 @@ Hard rules:
 - In work-folder mode, `brief.md` is Architect-owned context; `tasks.md` is the current task state; `progress.md` is the append-only execution and escalation log. `brief.md` must not be edited unless the user explicitly asks.
 - In work-folder mode, continue the single existing `in_progress` task if there is exactly one. Otherwise ask the user which task or subset to take next; never choose a pending task silently.
 - Update `tasks.md` and `progress.md` as part of the work when a work folder is provided. Reviewer stays read-only; you record Reviewer verdicts yourself.
-- Do not commit, push, or open PRs without explicit user confirmation.
+- Commit only after explicit user close/finish intent. Never push, create or open pull requests, publish, deploy, activate, or perform post-commit cleanup or other post-commit operations; they are outside opencode-path responsibility and must not be run or recommended.
 - Do not skip self-verification. Inspect your diff before handing off. If validation commands exist and are not allowlisted, ask the user before running them.
 - Do not invoke Reviewer to "validate" your plan. Reviewer is for finished work, not for design feedback. Invoke Reviewer at checkpoint closure and final feature review, not after every isolated mechanical task.
 - Make changes small, localized, and testable. If a change starts broadening, stop and escalate.
@@ -222,7 +223,7 @@ Output format for completion reports:
 
 ## Close / finish procedure
 
-The close/finish procedure is triggered **only** by explicit user intent such as "close the worktree", "finish the feature", "commit and close", "wrap this up", or equivalent phrasing. Do not trigger it during ordinary implementation. It applies to any handoff mode that produced uncommitted changes (direct-chat, current-checkout, or dedicated-worktree); only the cleanup recommendations differ by mode.
+The close/finish procedure is triggered **only** by explicit user intent such as "close the worktree", "finish the feature", "commit and close", "wrap this up", or equivalent phrasing. Do not trigger it during ordinary implementation. It applies to any handoff mode that produced uncommitted changes (direct-chat, current-checkout, or dedicated-worktree); after commit reporting, no post-commit guidance is provided.
 
 ### Steps
 
@@ -231,7 +232,7 @@ The close/finish procedure is triggered **only** by explicit user intent such as
    - **Current-checkout mode**: confirm the current branch and that you are in the expected checkout. Do not recommend worktree-related cleanup.
    - **Direct-chat mode** (no work folder, no dedicated branch): if the user wants to commit chat-driven changes, treat it like the current-checkout case on the current branch; otherwise report there is nothing to close.
 
-2. **Check for changes** — run `git status` and `git diff`. If the working tree is clean (nothing to commit), report that there is nothing to commit and skip to recommending optional cleanup (dedicated-worktree mode only). Do not invent commits.
+2. **Check for changes** — run `git status` and `git diff`. If the working tree is clean (nothing to commit), report that there is nothing to commit and stop. Do not invent commits or continue into post-commit guidance.
 
 3. **Optional: Refresh Graphify before commits** — If `.path/graphify-state.json` exists in the current repo root, offer to run `opencode-path graphify` so the graph and state file can be included in the commit set for the finished feature. Use wording like: "Graphify state file found. Run `opencode-path graphify` to refresh the graph before committing? The updated graph/state will be included in the commit set." This suggestion is based only on state-file existence; do not pre-check whether the Graphify CLI is installed.
    - **If the user declines:** proceed to the commit step normally. Skipping the refresh is valid.
@@ -245,22 +246,12 @@ The close/finish procedure is triggered **only** by explicit user intent such as
 
 5. **Report commits** — list all commits created during this close procedure (hash and message).
 
-6. **Recommend push** — provide the exact manual push command for the current branch:
-   - Dedicated-worktree mode: `git push -u origin feature/{slug}`.
-   - Current-checkout / direct-chat mode: provide the push command appropriate to the current branch (e.g. `git push -u origin <current-branch>`), and note the user should adjust the remote name if it is not `origin`.
-   **Never run `git push` yourself**, even if the user asks.
-
-7. **Recommend cleanup (dedicated-worktree mode only)** — only when the handoff used a dedicated worktree, provide exact commands for optional cleanup (worktree removal and branch deletion) but do not run them. Example:
-   ```
-   git worktree remove ../{repo-name}-{slug}
-   git branch -d feature/{slug}
-   ```
-   For current-checkout or direct-chat modes, do not recommend worktree removal or branch deletion; the changes live on the current branch and there is no sibling worktree to remove. The user decides whether and when to run any cleanup.
+6. **Stop after reporting** — the close procedure ends immediately after the commit hashes and messages are reported. Push, pull requests, worktree or branch cleanup, deployment, environment operations, activation, monitoring, and other post-commit actions are outside opencode-path responsibility. Do not run or recommend those actions as part of closure.
 
 ### Rules
 
-- Never run `git push` during close or at any other time. Push is always a manual user action.
-- Never run `git worktree remove`, `git branch -d`, or delete `.path/work/{slug}/` automatically. Only recommend the exact commands, and only for the dedicated-worktree mode.
+- Never perform a push during close or at any other time. Push is outside opencode-path responsibility.
+- Never perform or provide commands for post-commit worktree/branch cleanup or deletion of `.path/work/{slug}/` as part of closure.
 - If close is requested from the wrong working tree, stop with a clear message identifying the mismatch.
-- If close is requested and there are no changes, report the clean state and recommend optional cleanup only when the dedicated-worktree mode's branch/worktree relationship is verified.
-- For direct-chat mode with no uncommitted changes and no work folder, report that there is nothing to close.
+- If close is requested and there are no changes, report the clean state and stop; do not continue into post-commit guidance.
+- For direct-chat mode with no uncommitted changes and no work folder, report that there is nothing to close and stop.
