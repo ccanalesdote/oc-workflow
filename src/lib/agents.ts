@@ -16,6 +16,13 @@ import {
   parseFrontmatter,
   setModelInContent,
 } from "./frontmatter.js";
+import {
+  PROFILE_MARKER,
+  composeProfilesIntoContent,
+  discoverRecognizedProfileNames,
+  normalizeProfileNames,
+  type ProfileName,
+} from "./profiles.js";
 import type { PackAgentName } from "./paths.js";
 import {
   readConfig,
@@ -56,6 +63,37 @@ export const BUILTIN_MANAGED_AGENTS: readonly string[] = ["plan", "build", "expl
 /** HTML comment marker injected into installed custom agent files. */
 export const MANAGED_MARKER = "<!-- managed-by: opencode-path -->";
 
+/** Reconciliation action for a managed custom agent definition. */
+export type CustomAgentReconciliationAction =
+  | "create"
+  | "replace"
+  | "unchanged"
+  | "remove"
+  | "conflict";
+
+/** Options for canonical custom-agent reconciliation. */
+export interface CustomAgentReconciliationOptions {
+  /** Desired profile target; omitted means preserve recognized installed state. */
+  profiles?: readonly string[];
+  /** Explicit model assignment; omitted means preserve a valid installed model. */
+  model?: string;
+  /** Whether the custom agent should exist. Defaults to true. */
+  desired?: boolean;
+}
+
+/** Planned canonical reconciliation for any managed custom agent. */
+export interface CustomAgentReconciliation {
+  name: PackAgentName;
+  path: string;
+  action: CustomAgentReconciliationAction;
+  expectedContent?: string;
+  /** Effective recognized target profiles retained by the plan. */
+  desiredProfiles: ProfileName[];
+  /** Only an explicit model assignment; undefined preserves the latest model. */
+  model?: string;
+  reason?: string;
+}
+
 /** Reconciliation action for the managed Architect definition. */
 export type ArchitectReconciliationAction =
   | "create"
@@ -69,6 +107,7 @@ export interface ArchitectReconciliation {
   path: string;
   action: ArchitectReconciliationAction;
   expectedContent?: string;
+  desiredProfiles?: ProfileName[];
   reason?: string;
 }
 
@@ -175,88 +214,287 @@ export function addManagedMarker(content: string): string {
   return trimmed + MANAGED_MARKER + "\n";
 }
 
-function canonicalArchitectContent(): string {
-  return addManagedMarker(readTemplate("architect"));
+const PROFILE_VARIANTS: Record<string, "dev" | "readonly"> = {
+  developer: "dev",
+  reviewer: "readonly",
+  auditor: "readonly",
+};
+
+function profileVariantForAgent(agentName: string): "dev" | "readonly" | undefined {
+  return PROFILE_VARIANTS[agentName];
+}
+
+function canonicalCustomAgentContent(
+  agentName: PackAgentName,
+  profiles: readonly string[],
+  model?: string
+): string {
+  let content = addManagedMarker(readTemplate(agentName));
+  const variant = profileVariantForAgent(agentName);
+
+  if (variant && content.includes(PROFILE_MARKER)) {
+    content = composeProfilesIntoContent(content, profiles, variant);
+  }
+
+  if (model !== undefined) {
+    content = setModelInContent(content, model);
+  }
+
+  return content;
+}
+
+function customAgentConflict(
+  agentName: PackAgentName,
+  filePath: string,
+  reason: string
+): CustomAgentReconciliation {
+  return {
+    name: agentName,
+    path: filePath,
+    action: "conflict",
+    desiredProfiles: [],
+    reason,
+  };
 }
 
 /**
- * Compare the installed managed Architect with the packaged canonical
- * definition. Only a valid, non-empty model is carried into the expected
- * content; all other marked drift is intentionally replaceable.
+ * Compare a managed custom agent with its latest packaged definition.
+ * Supported mutable state is limited to a valid model and recognized profile
+ * names; all other marked drift is replaced by canonical content.
+ */
+export function planCustomAgentReconciliation(
+  agentName: string,
+  target: InstallTarget,
+  options: CustomAgentReconciliationOptions = {}
+): CustomAgentReconciliation | null {
+  const managedAgent = getManagedAgent(agentName);
+  if (!managedAgent || managedAgent.kind !== "custom") return null;
+
+  const name = agentName as PackAgentName;
+  const filePath = join(target.agentDir, `${name}.md`);
+  const desired = options.desired ?? true;
+
+  if (!desired) {
+    if (!existsSync(filePath)) {
+      return {
+        name,
+        path: filePath,
+        action: "unchanged",
+        desiredProfiles: [],
+      };
+    }
+
+    let installedContent: string;
+    try {
+      installedContent = readFileSync(filePath, "utf-8");
+    } catch (error) {
+      return customAgentConflict(
+        name,
+        filePath,
+        `cannot read file: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+
+    if (!contentHasManagedMarker(installedContent)) {
+      return customAgentConflict(name, filePath, "file has no managed marker");
+    }
+
+    try {
+      const { frontmatter } = parseFrontmatter(installedContent);
+      if (
+        Object.prototype.hasOwnProperty.call(frontmatter, "model") &&
+        !isValidAgentModel(frontmatter.model)
+      ) {
+        return customAgentConflict(
+          name,
+          filePath,
+          "frontmatter model must be a non-empty string"
+        );
+      }
+    } catch (error) {
+      return customAgentConflict(
+        name,
+        filePath,
+        `invalid frontmatter: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+
+    return { name, path: filePath, action: "remove", desiredProfiles: [] };
+  }
+
+  if (!existsSync(filePath)) {
+    try {
+      const profiles = normalizeProfileNames(options.profiles ?? []);
+      if (options.model !== undefined && !isValidAgentModel(options.model)) {
+        return customAgentConflict(
+          name,
+          filePath,
+          "explicit model must be a non-empty string"
+        );
+      }
+      return {
+        name,
+        path: filePath,
+        action: "create",
+        expectedContent: canonicalCustomAgentContent(name, profiles, options.model),
+        desiredProfiles: profiles,
+        model: options.model,
+      };
+    } catch (error) {
+      return customAgentConflict(
+        name,
+        filePath,
+        `cannot compose canonical content: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  let installedContent: string;
+  let installedModel: string | undefined;
+  let installedProfiles: ProfileName[] = [];
+  try {
+    installedContent = readFileSync(filePath, "utf-8");
+  } catch (error) {
+    return customAgentConflict(
+      name,
+      filePath,
+      `cannot read file: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+
+  if (!contentHasManagedMarker(installedContent)) {
+    return customAgentConflict(name, filePath, "file has no managed marker");
+  }
+
+  try {
+    const { frontmatter } = parseFrontmatter(installedContent);
+    if (Object.prototype.hasOwnProperty.call(frontmatter, "model")) {
+      if (!isValidAgentModel(frontmatter.model)) {
+        return customAgentConflict(
+          name,
+          filePath,
+          "frontmatter model must be a non-empty string"
+        );
+      }
+      installedModel = frontmatter.model;
+    }
+    installedProfiles = discoverRecognizedProfileNames(installedContent);
+  } catch (error) {
+    return customAgentConflict(
+      name,
+      filePath,
+      `invalid frontmatter: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+
+  if (options.model !== undefined && !isValidAgentModel(options.model)) {
+    return customAgentConflict(
+      name,
+      filePath,
+      "explicit model must be a non-empty string"
+    );
+  }
+
+  const desiredProfiles = normalizeProfileNames(
+    options.profiles ?? installedProfiles
+  );
+  const model = options.model ?? installedModel;
+
+  try {
+    const expectedContent = canonicalCustomAgentContent(name, desiredProfiles, model);
+    return {
+      name,
+      path: filePath,
+      action: installedContent === expectedContent ? "unchanged" : "replace",
+      expectedContent,
+      desiredProfiles,
+      model: options.model,
+    };
+  } catch (error) {
+    return customAgentConflict(
+      name,
+      filePath,
+      `cannot compose canonical content: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+/**
+ * Apply a previously approved custom-agent reconciliation. Re-planning at
+ * apply time preserves newer valid models and prevents marker races from
+ * overwriting or deleting a file that changed during confirmation.
+ */
+export function applyCustomAgentReconciliation(
+  reconciliation: CustomAgentReconciliation,
+  target: InstallTarget
+): CustomAgentReconciliationAction {
+  if (reconciliation.action === "unchanged" || reconciliation.action === "conflict") {
+    return reconciliation.action;
+  }
+
+  const current = planCustomAgentReconciliation(reconciliation.name, target, {
+    desired: reconciliation.action !== "remove",
+    profiles: reconciliation.desiredProfiles,
+    model: reconciliation.model,
+  });
+  if (!current) return "conflict";
+
+  if (reconciliation.action === "remove") {
+    if (current.action === "unchanged") return "unchanged";
+    if (current.action !== "remove") return "conflict";
+    if (!existsSync(reconciliation.path) || !fileHasManagedMarker(reconciliation.path)) {
+      return "conflict";
+    }
+    rmSync(reconciliation.path);
+    return "remove";
+  }
+
+  if (current.action === "unchanged") return "unchanged";
+  if (current.action !== reconciliation.action) return "conflict";
+  if (!current.expectedContent) return "conflict";
+
+  const dir = dirname(reconciliation.path);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(reconciliation.path, current.expectedContent, "utf-8");
+  return reconciliation.action;
+}
+
+function toArchitectReconciliation(
+  reconciliation: CustomAgentReconciliation
+): ArchitectReconciliation {
+  return {
+    name: "architect",
+    path: reconciliation.path,
+    action:
+      reconciliation.action === "replace"
+        ? "update"
+        : reconciliation.action === "create" ||
+            reconciliation.action === "unchanged" ||
+            reconciliation.action === "conflict"
+          ? reconciliation.action
+          : "conflict",
+    expectedContent: reconciliation.expectedContent,
+    desiredProfiles: reconciliation.desiredProfiles,
+    reason: reconciliation.reason,
+  };
+}
+
+/**
+ * Backward-compatible Architect-specific wrapper over generic custom-agent
+ * reconciliation.
  */
 export function planArchitectReconciliation(
   target: InstallTarget,
   desired = true
 ): ArchitectReconciliation | null {
-  const filePath = join(target.agentDir, "architect.md");
   if (!desired) return null;
-
-  if (!existsSync(filePath)) {
-    return {
-      name: "architect",
-      path: filePath,
-      action: "create",
-      expectedContent: canonicalArchitectContent(),
-    };
-  }
-
-  let installedContent: string;
-  try {
-    installedContent = readFileSync(filePath, "utf-8");
-  } catch (error) {
-    return {
-      name: "architect",
-      path: filePath,
-      action: "conflict",
-      reason: `cannot read file: ${error instanceof Error ? error.message : String(error)}`,
-    };
-  }
-
-  if (!contentHasManagedMarker(installedContent)) {
-    return {
-      name: "architect",
-      path: filePath,
-      action: "conflict",
-      reason: "file has no managed marker",
-    };
-  }
-
-  let expectedContent = canonicalArchitectContent();
-  try {
-    const { frontmatter } = parseFrontmatter(installedContent);
-    if (Object.prototype.hasOwnProperty.call(frontmatter, "model")) {
-      const model = frontmatter.model;
-      if (!isValidAgentModel(model)) {
-        return {
-          name: "architect",
-          path: filePath,
-          action: "conflict",
-          reason: "frontmatter model must be a non-empty string",
-        };
-      }
-      expectedContent = setModelInContent(expectedContent, model);
-    }
-  } catch (error) {
-    return {
-      name: "architect",
-      path: filePath,
-      action: "conflict",
-      reason: `invalid frontmatter: ${error instanceof Error ? error.message : String(error)}`,
-    };
-  }
-
-  return {
-    name: "architect",
-    path: filePath,
-    action: installedContent === expectedContent ? "unchanged" : "update",
-    expectedContent,
-  };
+  const reconciliation = planCustomAgentReconciliation("architect", target, {
+    desired: true,
+  });
+  return reconciliation ? toArchitectReconciliation(reconciliation) : null;
 }
 
-/**
- * Apply a previously approved Architect reconciliation. The marker is checked
- * again at write time so a newly-created manual conflict is never overwritten.
- */
+/** Apply the backward-compatible Architect reconciliation wrapper. */
 export function applyArchitectReconciliation(
   reconciliation: ArchitectReconciliation,
   target: InstallTarget
@@ -265,49 +503,20 @@ export function applyArchitectReconciliation(
     return reconciliation.action;
   }
 
-  const filePath = join(target.agentDir, "architect.md");
-  // Re-plan immediately before writing. The aggregate init plan is created
-  // before confirmation, so the file may have changed while the user was
-  // deciding whether to apply it. This also re-applies the newest valid model
-  // instead of writing stale expectedContent from the preview.
-  const current = planArchitectReconciliation(target);
-  if (!current) {
-    reconciliation.reason = "Architect reconciliation is no longer desired";
-    return "conflict";
-  }
+  const result = applyCustomAgentReconciliation(
+    {
+      name: "architect",
+      path: reconciliation.path,
+      action: reconciliation.action === "update" ? "replace" : reconciliation.action,
+      expectedContent: reconciliation.expectedContent,
+      desiredProfiles: reconciliation.desiredProfiles ?? [],
+    },
+    target
+  );
 
-  if (reconciliation.action === "create") {
-    if (current.action === "unchanged") {
-      // Another compatible writer completed the create between plan and apply.
-      return "unchanged";
-    }
-    if (current.action !== "create") {
-      reconciliation.reason = current.reason ??
-        "file appeared or changed between plan and apply";
-      return "conflict";
-    }
-  } else {
-    if (current.action === "unchanged") {
-      // The file became canonical while confirmation was pending.
-      return "unchanged";
-    }
-    if (current.action !== "update") {
-      reconciliation.reason = current.reason ??
-        "file changed or disappeared between plan and apply";
-      return "conflict";
-    }
-  }
-
-  const expectedContent = current.expectedContent;
-  if (!expectedContent) {
-    reconciliation.reason = "missing canonical Architect content after revalidation";
-    return "conflict";
-  }
-
-  const dir = dirname(filePath);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(filePath, expectedContent, "utf-8");
-  return reconciliation.action;
+  if (result === "replace") return "update";
+  if (result === "remove") return "conflict";
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -633,6 +842,35 @@ export interface AgentApplyResult {
   conflicts: string[];
 }
 
+/** The built-in operation that failed while applying a bulk agent change. */
+export interface AgentApplyFailure {
+  action: "install" | "delete" | "restore" | "hide";
+  name: string;
+  error: string;
+}
+
+/** Error metadata retained when a bulk apply fails after earlier operations. */
+export interface AgentApplyError extends Error {
+  partialResult: AgentApplyResult;
+  failure: AgentApplyFailure;
+}
+
+function rethrowAgentApplyError(
+  error: unknown,
+  result: AgentApplyResult,
+  failure: Omit<AgentApplyFailure, "error">
+): never {
+  const applyError = error instanceof Error ? error : new Error(String(error));
+  Object.assign(applyError, {
+    partialResult: result,
+    failure: {
+      ...failure,
+      error: applyError.message,
+    },
+  });
+  throw applyError;
+}
+
 /**
  * Apply planned agent changes to the target. Returns the actual result
  * (which may differ from the plan if conflicts arise at write time).
@@ -650,34 +888,54 @@ export function applyAgentChanges(
     conflicts: [...changes.conflicts],
   };
 
-  for (const name of changes.toInstall) {
-    const installResult = installCustomAgent(name as PackAgentName, target);
-    if (installResult === "created") {
-      result.installed.push(name);
-    } else if (installResult === "conflict") {
-      result.conflicts.push(name);
-    } else {
-      result.unchanged.push(name);
+  const apply = (
+    action: AgentApplyFailure["action"],
+    name: string,
+    operation: () => void
+  ): void => {
+    try {
+      operation();
+    } catch (error) {
+      rethrowAgentApplyError(error, result, { action, name });
     }
+  };
+
+  for (const name of changes.toInstall) {
+    apply("install", name, () => {
+      const installResult = installCustomAgent(name as PackAgentName, target);
+      if (installResult === "created") {
+        result.installed.push(name);
+      } else if (installResult === "conflict") {
+        result.conflicts.push(name);
+      } else {
+        result.unchanged.push(name);
+      }
+    });
   }
 
   for (const name of changes.toDelete) {
-    const deleted = deleteCustomAgent(name, target);
-    if (deleted) {
-      result.deleted.push(name);
-    } else {
-      result.unchanged.push(name);
-    }
+    apply("delete", name, () => {
+      const deleted = deleteCustomAgent(name, target);
+      if (deleted) {
+        result.deleted.push(name);
+      } else {
+        result.unchanged.push(name);
+      }
+    });
   }
 
   for (const name of changes.toRestore) {
-    restoreBuiltinAgent(name, target);
-    result.restored.push(name);
+    apply("restore", name, () => {
+      restoreBuiltinAgent(name, target);
+      result.restored.push(name);
+    });
   }
 
   for (const name of changes.toHide) {
-    hideBuiltinAgent(name, target);
-    result.hidden.push(name);
+    apply("hide", name, () => {
+      hideBuiltinAgent(name, target);
+      result.hidden.push(name);
+    });
   }
 
   result.unchanged.push(...changes.unchanged);

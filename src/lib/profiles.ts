@@ -212,11 +212,99 @@ export const PROFILES: Profile[] = [
 export const PROFILE_NAMES = PROFILES.map((p) => p.name);
 export type ProfileName = (typeof PROFILE_NAMES)[number];
 
+export type ProfileSelectionStatus = "absent" | "present" | "mixed";
+
+export interface DiscoveredProfileState {
+  /** The state is uniform absent/present, or differs between agents. */
+  status: ProfileSelectionStatus;
+  /**
+   * The uniform set, or the ordered union when the state is mixed. This is
+   * useful for displaying the current state without choosing a target state.
+   */
+  profiles: ProfileName[];
+  /** Recognized profile names for each inspected agent, in input order. */
+  perAgent: ProfileName[][];
+}
+
 /**
  * Look up a profile by name.
  */
 export function getProfile(name: string): Profile | undefined {
   return PROFILES.find((p) => p.name === name);
+}
+
+/**
+ * Normalize a user or file-discovered profile list to recognized canonical
+ * names, removing duplicates and using the bundled profile order.
+ */
+export function normalizeProfileNames(
+  profileNames: readonly string[]
+): ProfileName[] {
+  const requested = new Set(profileNames);
+  return PROFILE_NAMES.filter((name) => requested.has(name)) as ProfileName[];
+}
+
+/**
+ * Discover only profile blocks that opencode-path currently recognizes.
+ * Unknown blocks are intentionally not treated as supported mutable state.
+ */
+export function discoverRecognizedProfileNames(content: string): ProfileName[] {
+  const discovered = new Set<string>();
+  const beginPattern = /^\s*# BEGIN optional profile: ([^\r\n]+?)\s*$/gm;
+
+  for (const match of content.matchAll(beginPattern)) {
+    const profileName = match[1].trim();
+    if (getProfile(profileName)) {
+      discovered.add(profileName);
+    }
+  }
+
+  return normalizeProfileNames([...discovered]);
+}
+
+/**
+ * Describe profile state across one or more agents. An empty set is absent;
+ * identical non-empty sets are present; differing sets are mixed.
+ */
+export function describeProfileState(
+  profileSets: readonly (readonly string[])[]
+): ProfileSelectionStatus {
+  if (profileSets.length === 0) {
+    return "absent";
+  }
+
+  const normalized = profileSets.map((profiles) =>
+    normalizeProfileNames(profiles)
+  );
+  const first = normalized[0];
+
+  if (normalized.every((profiles) => profiles.length === 0)) {
+    return "absent";
+  }
+
+  const firstKey = first.join("\u0000");
+  if (normalized.every((profiles) => profiles.join("\u0000") === firstKey)) {
+    return "present";
+  }
+
+  return "mixed";
+}
+
+/**
+ * Discover recognized profile state for multiple agent contents without
+ * modifying any content or inferring a desired target state.
+ */
+export function discoverProfileState(
+  agentContents: readonly string[]
+): DiscoveredProfileState {
+  const perAgent = agentContents.map(discoverRecognizedProfileNames);
+  const profiles = normalizeProfileNames(perAgent.flat());
+
+  return {
+    status: describeProfileState(perAgent),
+    profiles,
+    perAgent,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -255,6 +343,98 @@ export function generateSnippet(
   }
   lines.push(INDENT + "# END optional profile: " + profileName);
   return lines.join("\n");
+}
+
+/**
+ * Generate the current canonical snippets for a desired profile set.
+ * Profile order is always the order of the bundled definitions.
+ */
+export function generateCanonicalProfileSnippets(
+  profileNames: readonly string[],
+  variant: "dev" | "readonly"
+): string[] {
+  return normalizeProfileNames(profileNames).map((profileName) => {
+    const profile = getProfile(profileName);
+    // normalizeProfileNames only returns recognized names.
+    if (!profile) {
+      throw new Error(`Unknown profile: ${profileName}`);
+    }
+    return generateSnippet(
+      variant === "dev" ? profile.dev : profile.readonly,
+      profile.name
+    );
+  });
+}
+
+const PROFILE_BLOCK_BEGIN = /^\s*# BEGIN optional profile: ([^\r\n]+?)\s*$/;
+const PROFILE_BLOCK_END = /^\s*# END optional profile: ([^\r\n]+?)\s*$/;
+
+/**
+ * Remove all existing profile blocks and insert the requested canonical
+ * snippets. This deliberately rebuilds profile blocks rather than preserving
+ * their bytes, so stale entries and duplicate blocks cannot survive.
+ */
+export function composeProfilesIntoContent(
+  content: string,
+  profileNames: readonly string[],
+  variant: "dev" | "readonly"
+): string {
+  const lines = content
+    .split("\n")
+    .map((line) =>
+      line.includes(LEGACY_PROFILE_MARKER)
+        ? line.replace(LEGACY_PROFILE_MARKER, PROFILE_MARKER)
+        : line
+    );
+  const withoutBlocks: string[] = [];
+
+  for (let index = 0; index < lines.length; index++) {
+    const begin = lines[index].match(PROFILE_BLOCK_BEGIN);
+    if (begin) {
+      const profileName = begin[1].trim();
+      let endIndex = -1;
+      for (let candidate = index + 1; candidate < lines.length; candidate++) {
+        const end = lines[candidate].match(PROFILE_BLOCK_END);
+        if (end && end[1].trim() === profileName) {
+          endIndex = candidate;
+          break;
+        }
+      }
+
+      if (endIndex === -1) {
+        throw new Error(`Unclosed profile block: ${profileName}`);
+      }
+
+      index = endIndex;
+      continue;
+    }
+
+    if (PROFILE_BLOCK_END.test(lines[index])) {
+      throw new Error(`Unexpected profile block end: ${lines[index].trim()}`);
+    }
+
+    withoutBlocks.push(lines[index]);
+  }
+
+  const markerIndex = withoutBlocks.findIndex(
+    (line) => line.includes(PROFILE_MARKER) || line.includes(LEGACY_PROFILE_MARKER)
+  );
+  if (markerIndex === -1) {
+    throw new Error("Profile marker not found in agent content.");
+  }
+
+  // Keep one canonical separator after the marker regardless of how many old
+  // blocks and blank lines were removed.
+  while (
+    withoutBlocks[markerIndex + 1] !== undefined &&
+    withoutBlocks[markerIndex + 1].trim() === ""
+  ) {
+    withoutBlocks.splice(markerIndex + 1, 1);
+  }
+
+  const snippets = generateCanonicalProfileSnippets(profileNames, variant);
+  withoutBlocks.splice(markerIndex + 1, 0, ...snippets, "");
+  return withoutBlocks.join("\n");
 }
 
 // ---------------------------------------------------------------------------

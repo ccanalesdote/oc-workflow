@@ -23,6 +23,8 @@ import {
   deleteManagedSkill,
   planCoreSkillReconciliation,
   applyCoreSkillReconciliation,
+  planManagedSkillReconciliation,
+  applyManagedSkillReconciliation,
 } from "./skills.js";
 import { parseFrontmatter } from "./frontmatter.js";
 import {
@@ -147,6 +149,130 @@ describe("architecture core-skill reconciliation", () => {
     expect(conflict.action).toBe("conflict");
     expect(applyCoreSkillReconciliation(conflict, target)).toBe("conflict");
     expect(readFileSync(create.path, "utf-8")).toBe("# Manual skill\n");
+  });
+});
+
+describe("generic managed-skill reconciliation", () => {
+  it("keeps core skills always desired and creates missing core definitions", () => {
+    for (const skillName of CORE_SKILLS) {
+      const target = fixtureTarget();
+      const plan = planManagedSkillReconciliation(skillName, target, {
+        desired: false,
+      });
+
+      expect(plan.action).toBe("create");
+      expect(plan.expectedContent).toContain(MANAGED_SKILL_MARKER);
+    }
+  });
+
+  it("plans selected missing optional skills for creation", () => {
+    for (const skillName of OPTIONAL_SKILLS) {
+      const target = fixtureTarget();
+      const plan = planManagedSkillReconciliation(skillName, target, {
+        desired: true,
+      });
+
+      expect(plan.action).toBe("create");
+      expect(plan.expectedContent).toContain(`name: ${skillName}`);
+    }
+  });
+
+  it("can disable missing optional creation for reconciliation-only runs", () => {
+    const target = fixtureTarget();
+    const plan = planManagedSkillReconciliation(OPTIONAL_SKILLS[0], target, {
+      desired: true,
+      createMissing: false,
+    });
+
+    expect(plan.action).toBe("unchanged");
+    expect(existsSync(plan.path)).toBe(false);
+  });
+
+  it("replaces retained marked core and optional drift from current templates", () => {
+    const target = fixtureTarget();
+    const skillName = OPTIONAL_SKILLS[0];
+    installManagedSkill(skillName, target);
+    const filePath = getSkillInstallPath(skillName, target);
+    writeFileSync(filePath, `# old optional content\n${MANAGED_SKILL_MARKER}\n`);
+
+    const plan = planManagedSkillReconciliation(skillName, target, {
+      desired: true,
+    });
+    expect(plan.action).toBe("replace");
+    expect(applyManagedSkillReconciliation(plan, target)).toBe("replace");
+    expect(readFileSync(filePath, "utf-8")).toBe(readSkillTemplate(skillName));
+  });
+
+  it("removes explicitly deselected marked optional skills only", () => {
+    const target = fixtureTarget();
+    const skillName = OPTIONAL_SKILLS[0];
+    installManagedSkill(skillName, target);
+    const plan = planManagedSkillReconciliation(skillName, target, {
+      desired: false,
+    });
+
+    expect(plan.action).toBe("remove");
+    expect(applyManagedSkillReconciliation(plan, target)).toBe("remove");
+    expect(existsSync(getSkillInstallPath(skillName, target))).toBe(false);
+  });
+
+  it("leaves unmarked optional files as conflicts during removal", () => {
+    const target = fixtureTarget();
+    const skillName = OPTIONAL_SKILLS[0];
+    const filePath = getSkillInstallPath(skillName, target);
+    mkdirSync(join(filePath, ".."), { recursive: true });
+    const manual = "# manual optional skill\n";
+    writeFileSync(filePath, manual);
+
+    const plan = planManagedSkillReconciliation(skillName, target, {
+      desired: false,
+    });
+    expect(plan.action).toBe("conflict");
+    expect(applyManagedSkillReconciliation(plan, target)).toBe("conflict");
+    expect(readFileSync(filePath, "utf-8")).toBe(manual);
+  });
+
+  it("reconciles installed marked Graphify Explorer without installing an absent copy", () => {
+    const target = fixtureTarget();
+    const missing = planManagedSkillReconciliation("graphify-explorer", target);
+    expect(missing.action).toBe("unchanged");
+    expect(existsSync(missing.path)).toBe(false);
+
+    const filePath = getSkillInstallPath("graphify-explorer", target);
+    mkdirSync(join(filePath, ".."), { recursive: true });
+    writeFileSync(filePath, `# old graphify content\n${MANAGED_SKILL_MARKER}\n`);
+    const installed = planManagedSkillReconciliation("graphify-explorer", target);
+    expect(installed.action).toBe("replace");
+    expect(applyManagedSkillReconciliation(installed, target)).toBe("replace");
+    expect(readFileSync(filePath, "utf-8")).toBe(readSkillTemplate("graphify-explorer"));
+  });
+
+  it("skips an unmarked Graphify Explorer copy and preserves it byte-for-byte", () => {
+    const target = fixtureTarget();
+    const filePath = getSkillInstallPath("graphify-explorer", target);
+    mkdirSync(join(filePath, ".."), { recursive: true });
+    const manual = "# externally owned graphify skill\n";
+    writeFileSync(filePath, manual);
+
+    const plan = planManagedSkillReconciliation("graphify-explorer", target);
+    expect(plan.action).toBe("conflict");
+    expect(applyManagedSkillReconciliation(plan, target)).toBe("conflict");
+    expect(readFileSync(filePath, "utf-8")).toBe(manual);
+  });
+
+  it("is idempotent after canonical skill reconciliation", () => {
+    const target = fixtureTarget();
+    const skillName = OPTIONAL_SKILLS[0];
+    const first = planManagedSkillReconciliation(skillName, target, {
+      desired: true,
+    });
+    expect(applyManagedSkillReconciliation(first, target)).toBe("create");
+
+    const second = planManagedSkillReconciliation(skillName, target, {
+      desired: true,
+    });
+    expect(second.action).toBe("unchanged");
+    expect(applyManagedSkillReconciliation(second, target)).toBe("unchanged");
   });
 });
 
