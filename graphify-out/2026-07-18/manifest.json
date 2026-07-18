@@ -10,7 +10,7 @@
     "semantic_hash": "b597387321616f5d7d7680f907bfaec0"
   },
   ".opencode/plugins/graphify.js": {
-    "mtime": 1784345177.1532774,
+    "mtime": 1784252398.5545697,
     "ast_hash": "3ea725724bc8ebe483c9f13d6aa1124f",
     "semantic_hash": "3ea725724bc8ebe483c9f13d6aa1124f"
   },
@@ -20,9 +20,9 @@
     "semantic_hash": "7d9b05cdb2a270b5e924dd069c92d5d9"
   },
   "package.json": {
-    "mtime": 1784394538.3620098,
-    "ast_hash": "16d4165e17faa6d6cacf089244ef6209",
-    "semantic_hash": ""
+    "mtime": 1784252398.557387,
+    "ast_hash": "842269abe81012c9a1a0c8411b18a726",
+    "semantic_hash": "842269abe81012c9a1a0c8411b18a726"
   },
   "scripts/install-global.ts": {
     "mtime": 1780879442.2469049,
@@ -40,9 +40,9 @@
     "semantic_hash": ""
   },
   "src/cli.ts": {
-    "mtime": 1784394538.367657,
-    "ast_hash": "6b05562a544c7573cc2ffe70a04b3763",
-    "semantic_hash": ""
+    "mtime": 1784252398.5576155,
+    "ast_hash": "46d03c53b5b1e02828d93afdd1c350b6",
+    "semantic_hash": "46d03c53b5b1e02828d93afdd1c350b6"
   },
   "src/commands/agents.test.ts": {
     "mtime": 1782769841.7499208,
@@ -65,13 +65,13 @@
     "semantic_hash": "2f0809bf0cb932943a7b05f3611e7680"
   },
   "src/commands/init.test.ts": {
-    "mtime": 1784399733.9996657,
-    "ast_hash": "efc7c1ae3843ec1335743ebc4f31b6fc",
+    "mtime": 1784254221.2553413,
+    "ast_hash": "2901d3691dd425cb44e7c15187250145",
     "semantic_hash": ""
   },
   "src/commands/init.ts": {
-    "mtime": 1784399248.7463174,
-    "ast_hash": "5962c9e72950c397eb3cda9427b0eac8",
+    "mtime": 1784254221.2566576,
+    "ast_hash": "ca783592c463dfe1971ec8e89f6ba472",
     "semantic_hash": ""
   },
   "src/commands/models.test.ts": {
@@ -115,13 +115,13 @@
     "semantic_hash": "c54cf4ff90286914a14b93c8f05307a7"
   },
   "src/lib/agents.test.ts": {
-    "mtime": 1784352763.271589,
-    "ast_hash": "6867369b1d0022244609f8c9408736d1",
+    "mtime": 1784254221.2576466,
+    "ast_hash": "a87831feeaff09da94540fb01451cb4d",
     "semantic_hash": ""
   },
   "src/lib/agents.ts": {
-    "mtime": 1784354683.4207065,
-    "ast_hash": "da317ee8f23888993c6f26e5c64f76e2",
+    "mtime": 1784254221.2580366,
+    "ast_hash": "b5289452ec104796799ffd9faa195782",
     "semantic_hash": ""
   },
   "src/lib/config.test.ts": {
@@ -180,27 +180,27 @@
     "semantic_hash": ""
   },
   "src/lib/profiles.test.ts": {
-    "mtime": 1784351227.6927428,
-    "ast_hash": "b4a5e9a29823d79f40f74459935c9c17",
-    "semantic_hash": ""
+    "mtime": 1780814494.896812,
+    "ast_hash": "2b312c10e8d835a387c7c817615f6012",
+    "semantic_hash": "2b312c10e8d835a387c7c817615f6012"
   },
   "src/lib/profiles.ts": {
-    "mtime": 1784351022.3677628,
-    "ast_hash": "9dd70365d33acd7ca1b9ca4386b1b6bd",
-    "semantic_hash": ""
+    "mtime": 1780814483.286037,
+    "ast_hash": "be6c832acd0b4ec2e41edf59f51c17f5",
+    "semantic_hash": "be6c832acd0b4ec2e41edf59f51c17f5"
   },
   "src/lib/skills.test.ts": {
-    "mtime": 1784351687.4914994,
-    "ast_hash": "a69f97ffcbf83ef4ba00088f9e770933",
+    "mtime": 1784335774.634439,
+    "ast_hash": "ad1b7137cdd1365284ed26b06feb7e7d",
     "semantic_hash": ""
   },
   "src/lib/skills.ts": {
-    "mtime": 1784353465.521334,
-    "ast_hash": "faad5cdd82614552fab70ba6026224ad",
+    "mtime": 1784254221.260276,
+    "ast_hash": "294cc6e1db5d697e7900d68856bd50d3",
     "semantic_hash": ""
   },
   "src/lib/templates.test.ts": {
-    "mtime": 1784344003.6943989,
+    "mtime": 1784341863.6954067,
     "ast_hash": "f4ebd3aa7922835eb1837a2e5f96c95a",
     "semantic_hash": ""
   },
@@ -235,8 +235,8 @@
     "semantic_hash": "294cd42544648f5284b355f38a810295"
   },
   ".path/graphify-state.json": {
-    "mtime": 1784344003.6381974,
-    "ast_hash": "aaf853014d8b0e03cfbc1298efdf5ad6",
+    "mtime": 1784254818.1596236,
+    "ast_hash": "2cfb1f5afce1ac45e2e61a8f35e7721e",
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
@@ -500,22 +500,22 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1784356345.7107894,
-    "ast_hash": "aa00b1fd3a443bfb65b017587b821ff2",
+    "mtime": 1784254221.254189,
+    "ast_hash": "61ede968c5746639a66c68bc7d37ecc6",
     "semantic_hash": ""
   },
   "templates/architect.md": {
-    "mtime": 1784344003.6946535,
+    "mtime": 1784336304.5845869,
     "ast_hash": "b098e6c1751f3cf377c0527c6dcb0590",
     "semantic_hash": ""
   },
   "templates/auditor.md": {
-    "mtime": 1784344003.6968088,
+    "mtime": 1784336103.0999613,
     "ast_hash": "120b9a3b89e0e2e2816b1fafa4628507",
     "semantic_hash": ""
   },
   "templates/developer.md": {
-    "mtime": 1784344003.6991754,
+    "mtime": 1784341525.3344197,
     "ast_hash": "ebead2cac77d7ec0b1dc07b0328a48eb",
     "semantic_hash": ""
   },
@@ -525,12 +525,12 @@
     "semantic_hash": ""
   },
   "templates/reviewer.md": {
-    "mtime": 1784344003.6993399,
+    "mtime": 1784336716.7762685,
     "ast_hash": "be8246607845703cdb6bcb2d10bcb8b2",
     "semantic_hash": ""
   },
   "templates/skills/api-contracts/SKILL.md": {
-    "mtime": 1784344003.699477,
+    "mtime": 1784335774.6338408,
     "ast_hash": "1bed142c97187ac258d8115095bb6e00",
     "semantic_hash": ""
   },
@@ -555,7 +555,7 @@
     "semantic_hash": ""
   },
   "templates/skills/migration-and-data-change/SKILL.md": {
-    "mtime": 1784344003.6996105,
+    "mtime": 1784335774.6332288,
     "ast_hash": "9922a75ffe05d429998db0510e6e5aac",
     "semantic_hash": ""
   },
@@ -565,43 +565,28 @@
     "semantic_hash": ""
   },
   "templates/skills/test-strategy/SKILL.md": {
-    "mtime": 1784344003.6997406,
+    "mtime": 1784335697.6536145,
     "ast_hash": "211843f7446c77c4992bf2595c26a654",
     "semantic_hash": ""
   },
   "templates/spec.md": {
-    "mtime": 1784344003.6998842,
+    "mtime": 1784336299.7972674,
     "ast_hash": "4e9c94084c7d0d4baf6f59d183087763",
     "semantic_hash": ""
   },
   ".path/work/pre-commit-responsibility-boundary/brief.md": {
-    "mtime": 1784344003.638554,
+    "mtime": 1784255276.6387794,
     "ast_hash": "fd0e1c57f10a315437e375febf45c73d",
     "semantic_hash": ""
   },
   ".path/work/pre-commit-responsibility-boundary/progress.md": {
-    "mtime": 1784344003.6394103,
+    "mtime": 1784342704.3335652,
     "ast_hash": "682d6421802260ae5d78c03ce47e8c12",
     "semantic_hash": ""
   },
   ".path/work/pre-commit-responsibility-boundary/tasks.md": {
-    "mtime": 1784344003.6406531,
+    "mtime": 1784342610.0670724,
     "ast_hash": "dd65689e6ffd3e74620a59212f05348d",
-    "semantic_hash": ""
-  },
-  ".path/work/declarative-init-reconciliation/brief.md": {
-    "mtime": 1784394289.7969673,
-    "ast_hash": "73bedeb3fe4d789067b20ddc92cf1859",
-    "semantic_hash": ""
-  },
-  ".path/work/declarative-init-reconciliation/progress.md": {
-    "mtime": 1784400266.0213995,
-    "ast_hash": "23e36c09d62b60115475cccc4efc08a8",
-    "semantic_hash": ""
-  },
-  ".path/work/declarative-init-reconciliation/tasks.md": {
-    "mtime": 1784400257.9724033,
-    "ast_hash": "971c0d3720b63ce047569ccbcd9ad5e2",
     "semantic_hash": ""
   }
 }
