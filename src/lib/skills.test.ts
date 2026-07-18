@@ -332,6 +332,109 @@ describe("architecture protocol traceability", () => {
   });
 });
 
+describe("test-strategy capability-aware validation", () => {
+  it("discovers existing capabilities and requires relevant available checks", () => {
+    const content = readSkillTemplate("test-strategy");
+
+    expect(content).toMatch(/discovering the repository's existing validation capabilities/i);
+    expect(content).toContain("test frameworks and commands");
+    expect(content).toContain("smoke checks");
+    expect(content).toContain("E2E facilities");
+    expect(content).toContain("build/typecheck commands");
+    expect(content).toContain("CI configuration");
+    expect(content).toContain("documented manual checks");
+    expect(content).toMatch(/relevant test framework exists, require focused tests/i);
+    expect(content).toMatch(/relevant smoke or E2E facility exists, require its applicable checks/i);
+    expect(content).toMatch(/do not skip an available check/i);
+  });
+
+  it("treats absent infrastructure as disclosed non-blocking risk without adding it", () => {
+    const content = readSkillTemplate("test-strategy");
+
+    expect(content).toMatch(/no suitable test or E2E platform exists/i);
+    expect(content).toMatch(/best available local check/i);
+    expect(content).toMatch(/non-blocking pre-existing debt or residual risk/i);
+    expect(content).toMatch(/do not introduce incidental infrastructure/i);
+    expect(content).toMatch(/must never be presented as passing validation/i);
+  });
+
+  it("allows explicit acceptance only for an unavailable sensitive validation mechanism", () => {
+    const content = readSkillTemplate("test-strategy");
+
+    expect(content).toMatch(/sensitive change whose adequate validation mechanism is unavailable/i);
+    expect(content).toMatch(/explicit user risk decision/i);
+    expect(content).toMatch(/does not require an attached evidence artifact/i);
+
+    for (const prohibitedWaiver of [
+      "known defect",
+      "failed or omitted relevant available check",
+      "undefined security",
+      "compatibility",
+      "rollback/compensation",
+      "migration strategy",
+    ]) {
+      expect(content).toContain(prohibitedWaiver);
+    }
+
+    expect(content).toMatch(/Risk acceptance cannot waive a known defect, a failed or omitted relevant available check, or an undefined security, compatibility, rollback\/compensation, or migration strategy/i);
+  });
+});
+
+describe("migration and API contract local closure boundaries", () => {
+  it("keeps migration safety planning local and execution receipts post-commit", () => {
+    const content = readSkillTemplate("migration-and-data-change");
+
+    for (const requiredSafetyRule of [
+      "expand/contract",
+      "invalid-existing-data handling",
+      "rollback/compensation",
+      "compatibility",
+      "development/deployment ordering",
+      "lock risk",
+    ]) {
+      expect(content).toContain(requiredSafetyRule);
+    }
+
+    expect(content).toMatch(/Execution in a real environment, deployment, activation, monitoring, and execution receipts are post-commit responsibilities/i);
+    expect(content).toMatch(/manual migration project may close locally without a QA or production execution receipt/i);
+    expect(content).toMatch(/available local validation/i);
+    expect(content).toMatch(/must not be represented as completed local evidence or block local commit closure/i);
+  });
+
+  it("does not let risk acceptance replace migration safety strategy or known-defect handling", () => {
+    const content = readSkillTemplate("migration-and-data-change");
+
+    expect(content).toMatch(/explicit user risk decision may cover unavailable execution or validation evidence/i);
+    for (const prohibitedWaiver of [
+      "known unsafe defect",
+      "undefined migration/rollback/compensation/compatibility strategy",
+      "omitted or failed available check",
+    ]) {
+      expect(content).toContain(prohibitedWaiver);
+    }
+  });
+
+  it("keeps API compatibility verification local and rollout execution outside closure", () => {
+    const content = readSkillTemplate("api-contracts");
+
+    expect(content).toMatch(/relevant capabilities already available in the repository/i);
+    expect(content).toMatch(/deployed rollout execution, QA\/production evidence, activation, and operational receipts are outside local closure responsibility/i);
+    expect(content).toMatch(/Do not treat absent deployed evidence as a passing contract check/i);
+    expect(content).toMatch(/development order and compatibility\/rollout constraints may be documented locally/i);
+    expect(content).toMatch(/Do not require deployed evidence for local closure/i);
+
+    for (const prohibitedWaiver of [
+      "known defect",
+      "omitted or failed available check",
+      "undefined contract",
+      "compatibility",
+      "rollout strategy",
+    ]) {
+      expect(content).toContain(prohibitedWaiver);
+    }
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Optional skill template frontmatter validation (AC-11)
 // ---------------------------------------------------------------------------

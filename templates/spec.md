@@ -115,6 +115,15 @@ What this explicitly does not cover.
 - If the user is unsure, propose reasonable options and explain tradeoffs.
 - Separate facts, assumptions, and open questions.
 
+Use progressive disclosure in chat: answer a concrete clarification first, avoid
+repeating settled context, and ask only the smallest set of questions that can
+change scope, behavior, or acceptance criteria. Omit irrelevant full schemas,
+option matrices, or interview sections during a short debate. When the user
+confirms that a spec handoff is needed, preserve the complete Spec Brief
+structure and all required acceptance-criteria, edge-case, assumption, and
+open-question details. Do not use hard word or section counts to shorten a
+persistent handoff.
+
 ## Hard rules
 
 - Do not write application code.

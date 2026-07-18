@@ -218,15 +218,112 @@ describe("template permission invariants", () => {
     expect(content).toMatch(/invoke.*reviewer.*(?:checkpoint|final|quality\s+gate)/i);
   });
 
+  it("developer close flow ends after reporting commits", () => {
+    const content = readTemplate("developer");
+    const closeFlow = content.split("## Close / finish procedure")[1];
+
+    expect(closeFlow).toBeDefined();
+    expect(closeFlow).toMatch(/working tree/i);
+    expect(closeFlow).toMatch(/logical units/i);
+    expect(closeFlow).toMatch(/Report commits/i);
+    expect(closeFlow).toMatch(/close procedure ends immediately after the commit hashes and messages are reported/i);
+    expect(closeFlow).toMatch(/push, pull requests, worktree or branch cleanup, deployment, environment operations, activation/i);
+    expect(closeFlow).toMatch(/outside opencode-path responsibility/i);
+    expect(closeFlow).toMatch(/Do not run or recommend those actions/i);
+
+    // Post-commit commands and manual cleanup recipes must not be reintroduced
+    // into the terminal close flow.
+    expect(closeFlow).not.toContain("git push -u origin");
+    expect(closeFlow).not.toContain("git worktree remove");
+    expect(closeFlow).not.toContain("git branch -d");
+    expect(closeFlow).not.toMatch(/Recommend push/i);
+    expect(closeFlow).not.toMatch(/Recommend cleanup/i);
+  });
+
+  it("developer.md has no permissive post-commit guidance anywhere in the template", () => {
+    const content = readTemplate("developer");
+    const postCommitOperation =
+      /(?<!no[-\s])\b(?:push|pull\s+requests?|PRs?|PR\s+creation|publish(?:ing)?|deploy(?:ment|ing)?|activation|(?:worktree|branch)(?:\s*\/\s*(?:worktree|branch))?\s+(?:removal|deletion|cleanup)|post-commit(?:\s+\w+){0,2}\s+(?:cleanup|operations?|actions?))\b/i;
+    const permissionLanguage =
+      /\b(?:may|can|allowed|requires?|with(?:out)?|permission|confirmation|approval|direction)\b/i;
+
+    // Evaluate the complete template line by line so a boundary statement on
+    // one line cannot mask permissive wording on another. This rejects both
+    // "operation requires confirmation" and "never operation without
+    // confirmation", since both imply that confirmation would authorize it.
+    const contradictoryLines = content
+      .split("\n")
+      .filter((line) => postCommitOperation.test(line) && permissionLanguage.test(line));
+
+    expect(contradictoryLines).toEqual([]);
+    expect(content).toMatch(/push[\s\S]*outside opencode-path responsibility/i);
+    expect(content).toMatch(/pull requests?[\s\S]*outside opencode-path responsibility/i);
+    expect(content).toMatch(/publish[\s\S]*outside opencode-path responsibility/i);
+    expect(content).toMatch(/deploy(?:ment|ing)?[\s\S]*outside opencode-path responsibility/i);
+    expect(content).toMatch(/activation[\s\S]*outside opencode-path responsibility/i);
+    expect(content).toMatch(/post-commit cleanup[\s\S]*outside opencode-path responsibility/i);
+    expect(content).toMatch(/must not be (?:executed|run) or recommended/i);
+  });
+
   it("auditor.md is a final closure gate, not a pre-plan or design-review gate (AC-15, AC-16)", () => {
     const content = readTemplate("auditor");
-    // Must describe itself as a final/closure gate, post-Reviewer
+    // Must describe itself as an optional local closure audit, post-Reviewer
     expect(content).toMatch(/final closure gate/i);
+    expect(content).toMatch(/optional, user-invoked local closure audit/i);
+    expect(content).toMatch(/not required before commits/i);
     expect(content).toMatch(/distinct from Reviewer/i);
     // Must explicitly state it is NOT invoked for design-stage work
     expect(content).toMatch(/not.*(?:pre-plan|design-review)/i);
     // Must NOT contain design-stage usage instructions
     expect(content).not.toMatch(/After Architect produces a design/i);
+  });
+
+  it("Reviewer blocks local deficiencies but not absent infrastructure or post-commit evidence", () => {
+    const content = readTemplate("reviewer");
+
+    expect(content).toMatch(/Return `FAIL` for any of the following/i);
+    expect(content).toMatch(/relevant existing test, smoke, E2E, build, or other required available validation was skipped or failed/i);
+    expect(content).toMatch(/known security, correctness, compatibility, migration, rollback\/compensation/i);
+    expect(content).toMatch(/required safety, security, compatibility, rollback\/compensation, or migration strategy is undefined/i);
+    expect(content).toMatch(/dirty, incidental, untracked, or otherwise unsafe diff artifacts/i);
+    expect(content).toMatch(/Do not return `FAIL` solely because the repository has no suitable pre-existing test\/E2E platform/i);
+    expect(content).toMatch(/post-commit migration execution, deployment, activation, or operational receipts are absent/i);
+
+    expect(content).toMatch(/explicit user risk decision may close only a validation gap caused by unavailable capability/i);
+    expect(content).toMatch(/does not require an attached evidence artifact/i);
+    expect(content).toMatch(/Risk acceptance never changes the verdict for a known defect, a failed or omitted relevant available check, or an undefined required security, compatibility, rollback\/compensation, migration, or safety strategy/i);
+  });
+
+  it("Auditor remains optional and rejects prohibited risk-acceptance waivers", () => {
+    const content = readTemplate("auditor");
+
+    expect(content).toMatch(/optional, user-invoked local closure audit/i);
+    expect(content).toMatch(/Do not make Auditor a mandatory prerequisite for commit closure/i);
+    expect(content).toMatch(/Missing pre-existing test\/E2E infrastructure and absent post-commit migration, deployment, activation, or operational receipts are residual limitations/i);
+    expect(content).toMatch(/explicit user risk decision may cover only a validation or evidence gap caused by unavailable capability/i);
+    expect(content).toMatch(/must reject acceptance used to hide a known defect, a failed or omitted relevant available check, or an undefined required security, compatibility, rollback\/compensation, migration, or safety strategy/i);
+    expect(content).toMatch(/Unavailable validation must not be reported as passing validation/i);
+  });
+
+  it("Architect and Spec use proportional progressive disclosure without weakening handoffs", () => {
+    const architect = readTemplate("architect");
+    const spec = readTemplate("spec");
+
+    for (const content of [architect, spec]) {
+      expect(content).toMatch(/progressive disclosure/i);
+      expect(content).toMatch(/answer[\s\S]*concrete[\s\S]*first/i);
+      expect(content).toMatch(/avoid\s+repeating\s+settled\s+context/i);
+      expect(content).toMatch(/Do not use hard word or section counts/i);
+    }
+
+    expect(architect).toMatch(/complete selected playbook/i);
+    expect(architect).toMatch(/every required handoff section,\s+traceability link,\s+and safety gate/i);
+    expect(spec).toMatch(/complete Spec Brief\s+structure/i);
+    expect(spec).toMatch(/all required acceptance-criteria/i);
+    expect(spec).toContain("edge-case");
+    expect(spec).toContain("assumption");
+    expect(spec).toContain("open-question");
+    expect(spec).toMatch(/Omit irrelevant full schemas,\s+option matrices,\s+or interview sections/i);
   });
 
   it("local-architecture defines all required Implementation Contract subsections (AC-02, AC-08)", () => {
